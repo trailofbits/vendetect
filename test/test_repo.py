@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from unittest import TestCase
 
-from vendetect.repo import Repository
+from vendetect.repo import Repository, RepositoryCommit
 
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -28,3 +28,16 @@ class TestRepo(TestCase):
                 ), f"Missing expected file: {expected}")
         finally:
             os.chdir(old_cwd)
+
+    def test_prev_version(self):
+        repo = Repository(REPO_ROOT)
+        prev: RepositoryCommit | None = repo.previous_version(Path("./README.md"))
+        while prev is not None:
+            with prev:
+                pv = prev.previous_version(Path("./README.md"))
+            if pv is None:
+                break
+            prev = pv
+        self.assertIsNotNone(prev)
+        self.assertIsNone(prev.previous_version(Path("./README.md")))
+        self.assertEqual("16385f50f79fe3aa44b6a8e4ef131626be700b38", prev.rev)

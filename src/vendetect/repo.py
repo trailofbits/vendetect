@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
-from typing import Iterator, Optional, Self
+from typing import Iterable, Iterator, Optional, Self
 
 
 GIT_PATH: Path | None = shutil.which("git")
@@ -25,9 +25,11 @@ class Repository:
             return hash(self.root_path)
 
     def __enter__(self) -> "Repository":
+        # print(f"Entering {self!r}")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # print(f"Exiting {self!r}")
         pass
 
     def previous_version(self, path: Path) -> Optional["RepositoryCommit"]:
@@ -96,14 +98,14 @@ class _ClonedRepository(Repository):
             subprocess.check_call([GIT_PATH, "clone", str(self._clone_uri), "."], cwd=self.root_path,
                                   stderr=subprocess.DEVNULL)
         self._entries += 1
-        return self
+        return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._entries -= 1
         if self._entries == 0:
             self._tempdir.__exit__(exc_type, exc_val, exc_tb)
             self._tempdir = None
-
+        super().__exit__(exc_type, exc_val, exc_tb)
 
 class RepositoryCommit(_ClonedRepository):
     def __init__(self, repo: Repository, commit: str):
@@ -111,11 +113,31 @@ class RepositoryCommit(_ClonedRepository):
         self.repo: Repository = repo
         self.rev = commit
 
-    def __enter__(self) -> Self:
+    def _ancestors(self) -> list[Repository]:
+        stack = [self]
+        while isinstance(stack[-1], RepositoryCommit):
+            stack.append(stack[-1].repo)
+        return stack
+
+    def _enter(self) -> Self:
         ret = super().__enter__()
         if self._entries == 1:
             subprocess.check_call([GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL)
         return ret
+
+    def __enter__(self) -> Self:
+        for a in reversed(self._ancestors()):
+            if isinstance(a, RepositoryCommit):
+                a._enter()
+            else:
+                a.__enter__()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for a in self._ancestors():
+            if a is self:
+                super().__exit__(exc_type, exc_val, exc_tb)
+            else:
+                a.__exit__(exc_type, exc_val, exc_tb)
 
 
 class RemoteGitRepository(_ClonedRepository):

@@ -1,3 +1,4 @@
+import contextlib
 import os
 from pathlib import Path
 from unittest import TestCase
@@ -31,13 +32,18 @@ class TestRepo(TestCase):
 
     def test_prev_version(self):
         repo = Repository(REPO_ROOT)
-        prev: RepositoryCommit | None = repo.previous_version(Path("./README.md"))
-        while prev is not None:
-            with prev:
-                pv = prev.previous_version(Path("./README.md"))
-            if pv is None:
-                break
-            prev = pv
+        prev: RepositoryCommit | None = repo.previous_version(Path("./pyproject.toml"))
+        if prev is None:
+            pct = contextlib.nullcontext
+        else:
+            pct = prev
+        with pct:
+            while prev is not None:
+                with prev:
+                    pv = prev.previous_version(Path("./pyproject.toml"))
+                if pv is None:
+                    break
+                prev = pv
         self.assertIsNotNone(prev)
         self.assertIsNone(prev.previous_version(Path("./README.md")))
         self.assertEqual("16385f50f79fe3aa44b6a8e4ef131626be700b38", prev.rev)

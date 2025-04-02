@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from functools import wraps
 from heapq import heappush, heappop
 from pathlib import Path
+import types
 from typing import Iterable, Iterator
 
 from numpy import ndarray
@@ -8,6 +10,28 @@ from numpy import ndarray
 from .comparison import Comparator, Comparison
 from .copydetect import CopyDetectComparator
 from .repo import Repository
+
+
+class Status:
+    def on_compare(self, test_repo: Repository, source_repo: Repository, test_paths: Iterable[Path] = (),
+                source_paths: Iterable[Path] = ()):
+        pass
+
+    def compare_completed(self, test_repo: Repository, source_repo: Repository, test_paths: Iterable[Path] = (),
+                          source_paths: Iterable[Path] = ()):
+        pass
+
+    def update_num_test_paths(self, num: int):
+        pass
+
+    def update_num_source_paths(self, num: int):
+        pass
+
+    def update_source_progress(self, path: Path):
+        pass
+
+    def update_test_progress(self, path: Path):
+        pass
 
 
 @dataclass(frozen=True)
@@ -39,11 +63,36 @@ class Detection:
 
 
 class VenDetector:
-    def __init__(self, comparator: Comparator | None = None):
+    def __init__(self, comparator: Comparator | None = None, status: Status | None = None):
         if comparator is None:
             comparator = CopyDetectComparator()
         self.comparator: Comparator = comparator
+        if status is None:
+            self.status: Status = Status()
+        else:
+            self.status = status
 
+    @staticmethod
+    def callback(func):
+        @wraps(func)
+        def wrapper(self: "VenDetector", *args, **kwargs):
+            if not hasattr(self.status, f"on_{func.__name__}"):
+                raise TypeError(f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required for "
+                                f"@callback on {self.__class__.__name__}.{func.__name__}")
+            callback_func = getattr(self.status, f"on_{func.__name__}")
+            callback_func(*args, **kwargs)
+            ret = func(self, *args, **kwargs)
+            is_generator = isinstance(ret, types.GeneratorType)
+            if is_generator:
+                yield from ret
+            if hasattr(self.status, f"{func.__name__}_completed"):
+                getattr(self.status, f"{func.__name__}_completed")(*args, **kwargs)
+            if not is_generator:
+                return ret
+
+        return wrapper
+
+    @callback
     def compare(self, test_repo: Repository, source_repo: Repository, test_paths: Iterable[Path] = (),
                 source_paths: Iterable[Path] = ()) -> Iterator[Detection]:
         explored_sources: set[Source] = set()
@@ -51,11 +100,17 @@ class VenDetector:
 
         test_paths = tuple(test_paths)
         if not test_paths:
-            test_paths = test_repo.files()
+            all_test_paths = True
+            test_paths = tuple(test_repo.files())
+            self.status.update_num_test_paths(len(test_paths))
+        else:
+            all_test_paths = False
 
         source_paths = tuple(source_paths)
 
         for test_path in test_paths:
+            if all_test_paths or not source_paths:
+                self.status.update_test_progress(test_path)
             try:
                 fp1 = self.comparator.fingerprint(test_path)
             except Exception as e:
@@ -69,8 +124,11 @@ class VenDetector:
             if source_paths:
                 sp = source_paths
             else:
-                sp = source_repo.files()
+                sp = tuple(source_repo.files())
+                self.status.update_num_source_paths(len(sp))
             for source_path in sp:
+                if all_test_paths or not source_paths:
+                    self.status.update_source_progress(source_path)
                 try:
                     fp2 = self.comparator.fingerprint(source_path)
                 except Exception as e:

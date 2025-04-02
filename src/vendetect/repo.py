@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Self
 
 
 GIT_PATH: Path | None = shutil.which("git")
@@ -19,7 +19,16 @@ class Repository:
             self.rev = ""
 
     def __hash__(self) -> int:
-        return hash(self.rev)
+        if self.rev:
+            return hash(self.rev)
+        else:
+            return hash(self.root_path)
+
+    def __enter__(self) -> "Repository":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
 
     def previous_version(self, path: Path) -> Optional["RepositoryCommit"]:
         if not self.is_git or GIT_PATH is None:
@@ -73,21 +82,19 @@ class Repository:
         yield from self.files()
 
 
-class RepositoryCommit(Repository):
-    def __init__(self, repo: Repository, commit: str):
-        super().__init__(repo.root_path)
-        self.repo: Repository = repo
-        self.rev = commit
+class _ClonedRepository(Repository):
+    def __init__(self, clone_uri: str):
+        super().__init__(Path(""))
+        self._clone_uri: str = clone_uri
         self._entries: int = 0
         self._tempdir: TemporaryDirectory | None = None
 
-    def __enter__(self) -> "RepositoryCommit":
+    def __enter__(self) -> Self:
         if self._entries == 0:
             self._tempdir = TemporaryDirectory()
             self.root_path = Path(self._tempdir.__enter__())
-            subprocess.check_call([GIT_PATH, "clone", str(self.repo.root_path), "."], cwd=self.root_path,
+            subprocess.check_call([GIT_PATH, "clone", str(self._clone_uri), "."], cwd=self.root_path,
                                   stderr=subprocess.DEVNULL)
-            subprocess.check_call([GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL)
         self._entries += 1
         return self
 
@@ -96,3 +103,22 @@ class RepositoryCommit(Repository):
         if self._entries == 0:
             self._tempdir.__exit__(exc_type, exc_val, exc_tb)
             self._tempdir = None
+
+
+class RepositoryCommit(_ClonedRepository):
+    def __init__(self, repo: Repository, commit: str):
+        super().__init__(str(repo.root_path))
+        self.repo: Repository = repo
+        self.rev = commit
+
+    def __enter__(self) -> Self:
+        ret = super().__enter__()
+        if self._entries == 1:
+            subprocess.check_call([GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL)
+        return ret
+
+
+class RemoteGitRepository(_ClonedRepository):
+    def __init__(self, url: str):
+        super().__init__(url)
+        self.url: str = url

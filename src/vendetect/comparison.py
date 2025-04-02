@@ -8,7 +8,7 @@ from numpy import ndarray
 F = TypeVar("F")
 
 
-@dataclass(frozen=True, unsafe_hash=True)
+@dataclass(frozen=True)
 class Comparison:
     """Number of overlapping tokens between the two files"""
     token_overlap: int
@@ -28,6 +28,10 @@ class Comparison:
     Dimension 0 contains slice starts, dimension 1 contains slice ends.
     """
     slices2: ndarray
+
+    def __hash__(self):
+        return hash((self.token_overlap, self.similarity1, self.similarity2, self.slices1.tobytes(),
+                     self.slices2.tobytes()))
 
     def __lt__(self, other: "Comparison") -> bool:
         if self.token_overlap > other.token_overlap:

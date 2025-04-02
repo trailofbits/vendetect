@@ -1,28 +1,49 @@
+from functools import wraps
 from pathlib import Path
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
-from typing import Iterable, Iterator, Optional, Self
+from typing import Iterator, Optional, Self
 
 
 GIT_PATH: Path | None = shutil.which("git")
 
 
+def with_self(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        with self:
+            return func(self, *args, **kwargs)
+
+    return wrapper
+
+
 class Repository:
     def __init__(self, root_path: Path):
         self.root_path: Path = root_path
-        if self.is_git:
-            self.rev: str = subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=self.root_path
-            ).strip().decode("utf-8")
-        else:
-            self.rev = ""
+        with self:
+            if self.is_git:
+                self.rev: str = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], cwd=self.root_path
+                ).strip().decode("utf-8")
+            else:
+                self.rev = ""
 
     def __hash__(self) -> int:
         if self.rev:
             return hash(self.rev)
         else:
             return hash(self.root_path)
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Repository):
+            return False
+        if self.rev and other.rev:
+            return self.rev == other.rev
+        elif self.rev or other.rev:
+            return False
+        else:
+            return self.root_path == other.root_path
 
     def __enter__(self) -> "Repository":
         # print(f"Entering {self!r}")
@@ -32,6 +53,7 @@ class Repository:
         # print(f"Exiting {self!r}")
         pass
 
+    @with_self
     def previous_version(self, path: Path) -> Optional["RepositoryCommit"]:
         if not self.is_git or GIT_PATH is None:
             return None
@@ -48,9 +70,11 @@ class Repository:
             return None
 
     @property
+    @with_self
     def is_git(self) -> bool:
         return self.root_path.is_dir() and (self.root_path / ".git").is_dir()
 
+    @with_self
     def git_files(self) -> Iterator[Path]:
         if GIT_PATH is None:
             raise RuntimeError("`git` binary could not be found")
@@ -62,6 +86,7 @@ class Repository:
                     path = self.root_path / path
                 yield path
 
+    @with_self
     def files(self) -> Iterator[Path]:
         if GIT_PATH is None or not self.is_git:
             stack: list[Path] = [self.root_path]
@@ -83,13 +108,31 @@ class Repository:
     def __iter__(self) -> Iterator[Path]:
         yield from self.files()
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.root_path!r})"
+
+    def __str__(self):
+        if self.rev:
+            return f"{self.root_path!s}@{self.rev}"
+        else:
+            return f"{self.root_path!s}"
+
+    @classmethod
+    def load(cls, repo_uri: str) -> "Repository":
+        # first see if it is a local repo
+        repo_uri_path = Path(repo_uri).absolute()
+        if repo_uri_path.exists() and repo_uri_path.is_dir():
+            return Repository(repo_uri_path)
+        else:
+            return RemoteGitRepository(repo_uri)
+
 
 class _ClonedRepository(Repository):
     def __init__(self, clone_uri: str):
-        super().__init__(Path(""))
         self._clone_uri: str = clone_uri
         self._entries: int = 0
         self._tempdir: TemporaryDirectory | None = None
+        super().__init__(Path(""))
 
     def __enter__(self) -> Self:
         if self._entries == 0:
@@ -109,9 +152,9 @@ class _ClonedRepository(Repository):
 
 class RepositoryCommit(_ClonedRepository):
     def __init__(self, repo: Repository, commit: str):
-        super().__init__(str(repo.root_path))
         self.repo: Repository = repo
         self.rev = commit
+        super().__init__(str(repo.root_path))
 
     def _ancestors(self) -> list[Repository]:
         stack = [self]
@@ -139,8 +182,30 @@ class RepositoryCommit(_ClonedRepository):
             else:
                 a.__exit__(exc_type, exc_val, exc_tb)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.repo!r}, {self.rev!r})"
+
+    @property
+    def root(self) -> Repository:
+        r = self
+        while isinstance(r, RepositoryCommit):
+            r = r.repo
+        return r
+
+    def __str__(self):
+        return f"{self.root.root_path!s}@{self.rev}"
+
 
 class RemoteGitRepository(_ClonedRepository):
     def __init__(self, url: str):
-        super().__init__(url)
         self.url: str = url
+        super().__init__(url)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.url!r})"
+
+    def __str__(self):
+        if self.rev:
+            return f"{self.url!s}@{self.rev}"
+        else:
+            return f"{self.url!s}"

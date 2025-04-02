@@ -33,7 +33,15 @@ class VenDetector:
 
         for test_path in self.test_repo.files():
             fp1 = self.comparator.fingerprint(test_path)
+            if test_path.is_absolute():
+                rel_test_path = test_path.relative_to(self.test_repo.root_path)
+            else:
+                rel_test_path = test_path
             for source_path in self.source_repo.files():
                 fp2 = self.comparator.fingerprint(source_path)
+                if source_path.is_absolute():
+                    rel_source_path = source_path.relative_to(self.source_repo.root_path)
+                else:
+                    rel_source_path = source_path
                 d = self.comparator.compare(fp1, fp2)
-                heappush(detections, d)
+                heappush(detections, Detection(self.test_repo, self.source_repo, rel_test_path, rel_source_path, d))

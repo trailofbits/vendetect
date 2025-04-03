@@ -4,12 +4,13 @@ import sys
 from typing import Iterable
 
 from rich.columns import Columns
-from rich.console import Console
+from rich.console import Console, Group
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 from rich import traceback
 
 from .detector import get_lexer_for_filename, Status, VenDetector
@@ -140,14 +141,12 @@ def main() -> None:
                 # Create a side-by-side view of the detected slices
                 test_slices = d.comparison.slices1
                 source_slices = d.comparison.slices2
-                
-                if len(test_slices[0]) > 0:
-                    # Get the first detected slice (most significant one)
-                    test_start: int = test_slices[0][0]
-                    test_end: int = test_slices[1][0]
-                    source_start: int = source_slices[0][0]
-                    source_end: int = source_slices[1][0]
 
+                test_slice_panels = []
+                source_slice_panels = []
+
+                for (test_start, test_end), (source_start, source_end) in \
+                        zip(zip(*test_slices.tolist()), zip(*source_slices.tolist())):
                     # Extract the content for the detected slices
                     test_lines = test_content.splitlines()
                     source_lines = source_content.splitlines()
@@ -172,23 +171,32 @@ def main() -> None:
                         start_line=max(1, source_start-10),
                         highlight_lines=set(range(max(1, source_start), source_end+1))
                     )
-                    
+
+                    if test_slice_panels:
+                        test_slice_panels.append(Text("  ⋮", style="dim"))
+                        source_slice_panels.append(Text("  ⋮", style="dim"))
+                    test_slice_panels.append(test_syntax)
+                    source_slice_panels.append(source_syntax)
+
+                if test_slice_panels or source_slice_panels:
                     # Create side-by-side panels
-                    test_panel = Panel(test_syntax, title="Test Code", border_style="cyan")
-                    source_panel = Panel(source_syntax, title="Source Code", border_style="green")
-                    
-                    # Print the result
-                    console.print(table)
-                    console.print()
+                    test_panel = Panel(Group(*test_slice_panels), title=f"{d.test.relative_path.name!s}",
+                                       border_style="cyan")
+                    source_panel = Panel(Group(*source_slice_panels), title=f"{d.source.relative_path.name!s}",
+                                         border_style="green")
 
                     context_panel = Panel.fit(
-                        Columns([test_panel, source_panel]),
+                        Group(
+                            table,
+                            Columns([test_panel, source_panel])
+                        ),
                         title="Vendored Code",
                         border_style="red",
                         title_align="left",
                         padding=(1, 1),
                     )
 
+                    console.print()
                     console.print(context_panel)
                     console.print()
                 else:

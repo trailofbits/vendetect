@@ -111,10 +111,12 @@ def main() -> None:
         handlers=[RichHandler(console=console)],
     )
 
+    # logging.getLogger("root").setLevel(logging.ERROR)
+
     traceback.install(show_locals=True)
 
     with Repository.load(args.TEST_REPO) as test_repo, Repository.load(args.SOURCE_REPO) as source_repo, \
             RichStatus(Console()) as status:
         vend = VenDetector(status=status)
         for d in vend.detect(test_repo, source_repo):
-            print(f"{d.test_repo!s}/{d.test_file!s} <-- {d.source_repo!s}/{d.source_file!s}")
+            print(f"{d.test_repo!s}/{d.test.relative_path!s} <-- {d.source_repo!s}/{d.source.relative_path!s}")

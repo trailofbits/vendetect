@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 import shutil
@@ -75,37 +76,33 @@ class Repository:
         return self.root_path.is_dir() and (self.root_path / ".git").is_dir()
 
     @with_self
-    def git_files(self) -> Iterator[Path]:
+    def git_files(self) -> Iterator["File"]:
         if GIT_PATH is None:
             raise RuntimeError("`git` binary could not be found")
         for line in subprocess.check_output([str(GIT_PATH), "ls-files"], cwd=self.root_path).splitlines():
             line = line.strip()
             if line:
                 path = Path(line.decode("utf-8"))
-                if not path.is_absolute():
-                    path = self.root_path / path
-                yield path
+                yield File(path, self)
 
     @with_self
-    def files(self) -> Iterator[Path]:
+    def files(self) -> Iterator["File"]:
         if GIT_PATH is None or not self.is_git:
-            stack: list[Path] = [self.root_path]
+            stack: list[File] = [self.root_path]
         else:
             stack = list(reversed(list(self.git_files())))
         history = set()
         while stack:
-            path = stack.pop()
-            if path.is_symlink():
-                path = path.readlink()
-            if path in history:
+            file = stack.pop().resolve()
+            if file in history:
                 continue
-            history.add(path)
-            if path.is_dir():
-                stack.extend(reversed(list(path.iterdir())))
-            elif path.is_file():
-                yield path
+            history.add(file)
+            if file.path.is_dir():
+                stack.extend(reversed(list(file.path.iterdir())))
+            elif file.path.is_file():
+                yield file
 
-    def __iter__(self) -> Iterator[Path]:
+    def __iter__(self) -> Iterator["File"]:
         yield from self.files()
 
     def __repr__(self):
@@ -152,6 +149,8 @@ class _ClonedRepository(Repository):
 
 class RepositoryCommit(_ClonedRepository):
     def __init__(self, repo: Repository, commit: str):
+        if isinstance(repo, RepositoryCommit):
+            repo = repo.root
         self.repo: Repository = repo
         self.rev = commit
         super().__init__(str(repo.root_path))
@@ -209,3 +208,33 @@ class RemoteGitRepository(_ClonedRepository):
             return f"{self.url!s}@{self.rev}"
         else:
             return f"{self.url!s}"
+
+
+@dataclass(frozen=True, unsafe_hash=True, init=False)
+class File:
+    relative_path: Path
+    repo: Repository
+
+    def __init__(self, path: Path, repo: Repository):
+        if path.is_absolute():
+            path = path.relative_to(repo.root_path)
+        object.__setattr__(self, "relative_path", path)
+        object.__setattr__(self, "repo", repo)
+
+    @property
+    def path(self) -> Path:
+        with self.repo:
+            return self.repo.root_path / self.relative_path
+
+    def resolve(self) -> Self:
+        with self.repo:
+            if self.path.is_symlink():
+                return File(self.path.readlink(), self.repo)
+            else:
+                return self
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.relative_path!r}, {self.repo!r})"
+
+    def __str__(self):
+        return f"{self.repo!s}/{self.relative_path!s}"

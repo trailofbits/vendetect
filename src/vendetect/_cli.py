@@ -10,7 +10,7 @@ from rich.progress import Progress, TaskID
 from rich import traceback
 
 from .detector import Status, VenDetector
-from .repo import Repository
+from .repo import File, Repository
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class RichStatus(Status):
     def __init__(self, console: Console):
         self.console: Console = console
         self.progress: Progress | None = None
-        self.compare_tasks: list[tuple[TaskID, TaskID, Repository]] = []
+        self.compare_tasks: list[TaskID] = []
 
     def __enter__(self):
         self.progress = Progress(console=self.console, transient=True)
@@ -28,37 +28,21 @@ class RichStatus(Status):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.progress.__exit__(exc_type, exc_val, exc_tb)
 
-    def on_compare(self, test_repo: Repository, source_repo: Repository, test_paths: Iterable[Path] = (),
-                source_paths: Iterable[Path] = ()):
-        if not test_paths or not source_paths:
-            self.compare_tasks.append((
-                self.progress.add_task(f":magnifying_glass_tilted_right: {test_repo!s}", start=False),
-                TaskID(-1),
-                source_repo,
-            ))
+    def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]):
+        self.compare_tasks.append(self.progress.add_task(f":magnifying_glass_tilted_right: comparing…"))
 
-    def compare_completed(self, test_repo: Repository, source_repo: Repository, test_paths: Iterable[Path] = (),
-                          source_paths: Iterable[Path] = ()):
-        if not test_paths or not source_paths:
-            self.compare_tasks.pop()
+    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]):
+        self.progress.remove_task(self.compare_tasks[-1])
+        self.compare_tasks.pop()
 
-    def update_num_test_paths(self, num: int):
-        self.progress.update(self.compare_tasks[-1][0], total=num)
+    def update_num_comparisons(self, num: int):
+        self.progress.update(self.compare_tasks[-1], total=num)
 
-    def update_num_source_paths(self, num: int):
-        if self.compare_tasks[-1][1] < 0:
-            self.compare_tasks[-1] = (
-                self.compare_tasks[-1][0],
-                self.progress.add_task(f":paw_print: {self.compare_tasks[-1][2]!s}", start=True),
-                self.compare_tasks[-1][2]
-            )
-        self.progress.update(self.compare_tasks[-1][1], total=num)
-
-    def update_test_progress(self, path: Path):
-        self.progress.update(self.compare_tasks[-1][0], advance=1, start=True, description=f"::magnifying_glass_tilted_right:: {path.name!s}")
-
-    def update_source_progress(self, path: Path):
-        self.progress.update(self.compare_tasks[-1][1], advance=1, description=f":paw_print: {path.name!s}")
+    def update_compare_progress(self, file: File | None = None):
+        self.progress.update(self.compare_tasks[-1], advance=1)
+        if file is not None:
+            self.progress.update(self.compare_tasks[-1],
+                                 description=f":magnifying_glass_tilted_right: {file.relative_path.name!s}")
 
 
 def main() -> None:

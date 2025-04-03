@@ -19,24 +19,16 @@ log = getLogger(__name__)
 
 
 class Status:
-    def on_compare(self, test_repo: Repository, source_repo: Repository, test_paths: Iterable[Path] = (),
-                source_paths: Iterable[Path] = ()):
+    def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]):
         pass
 
-    def compare_completed(self, test_repo: Repository, source_repo: Repository, test_paths: Iterable[Path] = (),
-                          source_paths: Iterable[Path] = ()):
+    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]):
         pass
 
-    def update_num_test_paths(self, num: int):
+    def update_num_comparisons(self, num: int):
         pass
 
-    def update_num_source_paths(self, num: int):
-        pass
-
-    def update_source_progress(self, path: Path):
-        pass
-
-    def update_test_progress(self, path: Path):
+    def update_compare_progress(self, file: File | None = None):
         pass
 
 
@@ -109,6 +101,7 @@ class VenDetector:
 
         return wrapper
 
+    @callback
     def compare(self, test_files: Iterable[File], source_files: Iterable[File]):
         test_files = tuple(test_files)
         source_files = tuple(source_files)
@@ -131,10 +124,14 @@ class VenDetector:
             test_files = tf
             source_files = sf
 
+            self.status.update_num_comparisons(len(test_files) * len(source_files))
+
             explored_sources: set[Source] = set()
             detections: list[Detection] = []
 
             for test_file in test_files:
+                self.status.update_compare_progress(test_file)
+
                 try:
                     fp1 = self.comparator.fingerprint(test_file.path)
                 except Exception as e:
@@ -142,6 +139,8 @@ class VenDetector:
                     continue
 
                 for source_file in source_files:
+                    self.status.update_compare_progress()
+
                     try:
                         fp2 = self.comparator.fingerprint(source_file.path)
                     except Exception as e:

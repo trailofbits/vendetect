@@ -8,7 +8,7 @@ import types
 from typing import Iterable, Iterator
 
 from numpy import ndarray
-from pygments import lexers
+from pygments import lexer, lexers
 from pygments.util import ClassNotFound
 
 from .comparison import Comparator, Comparison
@@ -16,6 +16,13 @@ from .copydetect import CopyDetectComparator
 from .repo import Repository, File
 
 log = getLogger(__name__)
+
+
+def get_lexer_for_filename(filename: str) -> lexer.Lexer | None:
+    try:
+        return lexers.get_lexer_for_filename(filename)
+    except ClassNotFound:
+        return None
 
 
 class Status:
@@ -115,11 +122,10 @@ class VenDetector:
 
             for lst, files in ((tf, test_files), (sf, source_files)):
                 for file in files:
-                    try:
-                        _ = lexers.get_lexer_for_filename(file.path)
-                        lst.append(file)
-                    except ClassNotFound:
+                    if get_lexer_for_filename(file.path.name) is None:
                         log.warning(f"Ignoring {file!s} because we do not have a lexer for its filetype")
+                    else:
+                        lst.append(file)
 
             test_files = tf
             source_files = sf

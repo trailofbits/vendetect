@@ -83,7 +83,7 @@ vendetect /path/to/my/project https://github.com/example/repo.git
 Vendetect supports three output formats:
 
 1. **rich** (default): Interactive console output with syntax highlighting and side-by-side code comparison
-2. **csv**: Comma-separated values format with columns for Test File, Source File, Slice Start, Slice End, and Similarity
+2. **csv**: Comma-separated values format with columns for Test File, Source File, Test Slice Start, Test Slice End, Source Slice Start, Source Slice End, and Similarity
 3. **json**: JSON format with detailed information about each detection, including file paths, similarity scores, and matched code slices
 
 Example using CSV output:

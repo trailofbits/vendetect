@@ -61,7 +61,8 @@ def output_csv(detections: Iterable[Detection], output_file=None):
     output = output_file if output_file else sys.stdout
     csv_writer = csv.writer(output)
     # Write header
-    csv_writer.writerow(["Test File", "Source File", "Slice Start", "Slice End", "Similarity"])
+    csv_writer.writerow(["Test File", "Source File", "Test Slice Start", "Test Slice End", "Source Slice Start",
+                         "Source Slice End", "Similarity"])
 
     for d in detections:
         # Calculate overall similarity (average of both similarities)
@@ -75,7 +76,7 @@ def output_csv(detections: Iterable[Detection], output_file=None):
         source_slices = d.comparison.slices2
 
         for (test_start, test_end), (source_start, source_end) in zip(
-            zip(*test_slices.tolist(), strict=False), zip(*source_slices.tolist(), strict=False), strict=False
+            test_slices, source_slices, strict=False
         ):
             # Write one row per matched slice
             csv_writer.writerow(
@@ -84,6 +85,8 @@ def output_csv(detections: Iterable[Detection], output_file=None):
                     f"{d.source.relative_path!s}",
                     test_start,
                     test_end,
+                    source_start,
+                    source_end,
                     f"{avg_similarity:.4f}",
                 ]
             )
@@ -101,16 +104,17 @@ def output_json(detections: Iterable[Detection], output_file=None):
             break
 
         # Get slices
-        test_slices = d.comparison.slices1.tolist()
-        source_slices = d.comparison.slices2.tolist()
+        test_slices = d.comparison.slices1
+        source_slices = d.comparison.slices2
 
         # Prepare slices data
         slices_data = []
-        for i in range(len(test_slices[0])):
+        for (test_slice_start, test_slice_end), (source_slice_start, source_slice_end) in \
+                zip(test_slices, source_slices, strict=False):
             slices_data.append(
                 {
-                    "test_slice": {"start": test_slices[0][i], "end": test_slices[1][i]},
-                    "source_slice": {"start": source_slices[0][i], "end": source_slices[1][i]},
+                    "test_slice": {"start": test_slice_start, "end": test_slice_end},
+                    "source_slice": {"start": source_slice_start, "end": source_slice_end},
                 }
             )
 
@@ -172,7 +176,7 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
             source_slice_panels = []
 
             for (test_start, test_end), (source_start, source_end) in zip(
-                zip(*test_slices.tolist(), strict=False), zip(*source_slices.tolist(), strict=False), strict=False
+                test_slices, source_slices, strict=False
             ):
                 # Extract the content for the detected slices
                 test_lines = test_content.splitlines()

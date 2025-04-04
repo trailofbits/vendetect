@@ -1,14 +1,45 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, Type, Iterable, Iterator
 
 from numpy import ndarray
 
+C = TypeVar("C")
 F = TypeVar("F")
 
+@dataclass(frozen=True, unsafe_hash=True, order=True)
+class Slice:
+    from_index: int
+    to_index: int
 
-@dataclass(frozen=True)
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.from_index}, {self.to_index})"
+
+    def __str__(self):
+        return f"{self.from_index}–{self.to_index}"
+
+    def __len__(self):
+        return 2
+
+    def __getitem__(self, index: int) -> int:
+        if index == 0:
+            return self.from_index
+        elif index == 1:
+            return self.to_index
+        else:
+            raise IndexError(f"Invalid index: {index}")
+
+    def __iter__(self) -> Iterator[int]:
+        yield self.from_index
+        yield self.to_index
+
+    @classmethod
+    def from_ndarray(cls: Type[C], array: ndarray) -> Iterable[C]:
+        return (cls(from_pos, to_pos) for from_pos, to_pos in zip(*array, strict=False))
+
+
+@dataclass(frozen=True, unsafe_hash=True)
 class Comparison:
     """Number of overlapping tokens between the two files"""
 
@@ -20,26 +51,13 @@ class Comparison:
     """number of overlapping tokens divided by the total number of tokens in the second file"""
     similarity2: float
 
-    """2xN int array: locations of copied code in the unfiltered text.
-    Dimension 0 contains slice starts, dimension 1 contains slice ends.
+    """tuple of Slices: locations of copied code in the unfiltered text.
     """
-    slices1: ndarray
+    slices1: tuple[Slice, ...]
 
-    """2xN int array: locations of copied code in the unfiltered text.
-    Dimension 0 contains slice starts, dimension 1 contains slice ends.
+    """tuple of Slices: locations of copied code in the unfiltered text.
     """
-    slices2: ndarray
-
-    def __hash__(self):
-        return hash(
-            (
-                self.token_overlap,
-                self.similarity1,
-                self.similarity2,
-                self.slices1.tobytes(),
-                self.slices2.tobytes(),
-            )
-        )
+    slices2: tuple[Slice, ...]
 
     def __lt__(self, other: "Comparison") -> bool:
         if self.token_overlap > other.token_overlap:

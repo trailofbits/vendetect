@@ -6,11 +6,10 @@ from functools import wraps
 from heapq import heappop, heappush
 from logging import getLogger
 
-from numpy import ndarray
 from pygments import lexer, lexers
 from pygments.util import ClassNotFound
 
-from .comparison import Comparator, Comparison
+from .comparison import Comparator, Comparison, Slice
 from .copydetect import CopyDetectComparator
 from .repo import File, Repository
 
@@ -38,22 +37,19 @@ class Status:
         pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, unsafe_hash=True)
 class Source:
     file: File
-    source_slices: ndarray
-
-    def __hash__(self) -> int:
-        return hash((self.file, self.source_slices.tobytes()))
+    source_slices: tuple[Slice, ...]
 
     def __eq__(self, other):
         if not isinstance(other, Source):
             return False
-        return self.file == other.file and (self.source_slices == other.source_slices).all()
+        return self.file == other.file and self.source_slices == other.source_slices
 
     def __lt__(self, other: "Source"):
         return self.file.relative_path < other.file.relative_path or (
-            self.file == other.file and (self.source_slices < other.source_slices).all()
+            self.file == other.file and self.source_slices < other.source_slices
         )
 
     def __repr__(self):
@@ -63,11 +59,11 @@ class Source:
         file_str = str(self.file)
         if file_str.startswith("http"):
             slices = ";".join(
-                (f"L{from_pos}-L{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist(), strict=False))
+                (f"L{s.from_index}-L{s.to_index}" for s in self.source_slices)
             )
             return f"{self.file!s}#{slices}"
         slices = ";".join(
-            (f"{from_pos}-{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist(), strict=False))
+            (f"{s.from_index}-{s.to_index}" for s in self.source_slices)
         )
         return f"{self.file!s}:{slices}"
 

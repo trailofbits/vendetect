@@ -4,8 +4,9 @@ import json
 import logging
 import os
 import sys
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 
+from rich import traceback
 from rich.columns import Columns
 from rich.console import Console, Group
 from rich.logging import RichHandler
@@ -14,9 +15,8 @@ from rich.progress import Progress, TaskID
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
-from rich import traceback
 
-from .detector import Detection, get_lexer_for_filename, Status, VenDetector
+from .detector import Detection, Status, VenDetector, get_lexer_for_filename
 from .repo import File, Repository
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class RichStatus(Status):
 
     def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]):
         self.compare_tasks.append(
-            self.progress.add_task(f":magnifying_glass_tilted_right: comparing…")
+            self.progress.add_task(":magnifying_glass_tilted_right: comparing…")
         )
 
     def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]):
@@ -75,7 +75,7 @@ def output_csv(detections: Iterable[Detection], output_file=None):
         source_slices = d.comparison.slices2
 
         for (test_start, test_end), (source_start, source_end) in zip(
-            zip(*test_slices.tolist()), zip(*source_slices.tolist())
+            zip(*test_slices.tolist(), strict=False), zip(*source_slices.tolist(), strict=False), strict=False
         ):
             # Write one row per matched slice
             csv_writer.writerow(
@@ -139,7 +139,7 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
 
     for d in detections:
         # Create a table for the detection results
-        table = Table(title=f"Vendoring Detection", expand=True)
+        table = Table(title="Vendoring Detection", expand=True)
         table.add_column("Test File", style="cyan")
         table.add_column("Source File", style="green")
         table.add_column("Similarity", justify="right", style="yellow")
@@ -172,7 +172,7 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
             source_slice_panels = []
 
             for (test_start, test_end), (source_start, source_end) in zip(
-                zip(*test_slices.tolist()), zip(*source_slices.tolist())
+                zip(*test_slices.tolist(), strict=False), zip(*source_slices.tolist(), strict=False), strict=False
             ):
                 # Extract the content for the detected slices
                 test_lines = test_content.splitlines()
@@ -298,7 +298,7 @@ def main() -> None:
             sys.exit(1)
         try:
             output_file = open(args.output, "w")
-        except IOError as e:
+        except OSError as e:
             sys.stderr.write(f"Error: Could not open output file {args.output} for writing: {e}\n")
             sys.exit(1)
 
@@ -341,17 +341,12 @@ def main() -> None:
 
                 def file_filter(file: File) -> bool:
                     suffix = file.relative_path.suffix
-                    if suffix in args.file_types:
-                        return True
-                    elif suffix.startswith(".") and suffix[1:] in args.file_types:
+                    if suffix in args.file_types or suffix.startswith(".") and suffix[1:] in args.file_types:
                         return True
                     suffixes = "".join(file.relative_path.suffixes)
-                    if suffixes in args.file_types:
+                    if suffixes in args.file_types or suffixes.startswith(".") and suffixes[1:] in args.file_types:
                         return True
-                    elif suffixes.startswith(".") and suffixes[1:] in args.file_types:
-                        return True
-                    else:
-                        return False
+                    return False
 
             detections = vend.detect(test_repo, source_repo, file_filter=file_filter)
 

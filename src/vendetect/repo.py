@@ -1,13 +1,13 @@
+import shutil
+import subprocess
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import wraps
 from logging import getLogger
 from pathlib import Path
-import shutil
-import subprocess
 from tempfile import TemporaryDirectory
-from typing import Iterator, Optional, Self
+from typing import Optional, Self
 from urllib.parse import urlparse
-
 
 GIT_PATH: Path | None = shutil.which("git")
 
@@ -38,18 +38,16 @@ class Repository:
     def __hash__(self) -> int:
         if self.rev:
             return hash(self.rev)
-        else:
-            return hash(self.root_path)
+        return hash(self.root_path)
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Repository):
             return False
         if self.rev and other.rev:
             return self.rev == other.rev
-        elif self.rev or other.rev:
+        if self.rev or other.rev:
             return False
-        else:
-            return self.root_path == other.root_path
+        return self.root_path == other.root_path
 
     def __enter__(self) -> "Repository":
         # print(f"Entering {self!r}")
@@ -88,8 +86,7 @@ class Repository:
             prev_version = prev_version[1:-1]
         if prev_version:
             return RepositoryCommit(self, prev_version)
-        else:
-            return None
+        return None
 
     @property
     @with_self
@@ -134,8 +131,7 @@ class Repository:
     def __str__(self):
         if self.rev:
             return f"{self.root_path!s}@{self.rev}"
-        else:
-            return f"{self.root_path!s}"
+        return f"{self.root_path!s}"
 
     @classmethod
     def load(cls, repo_uri: str) -> "Repository":
@@ -143,8 +139,7 @@ class Repository:
         repo_uri_path = Path(repo_uri).absolute()
         if repo_uri_path.exists() and repo_uri_path.is_dir():
             return Repository(repo_uri_path)
-        else:
-            return RemoteGitRepository(repo_uri)
+        return RemoteGitRepository(repo_uri)
 
 
 class _ClonedRepository(Repository):
@@ -152,7 +147,7 @@ class _ClonedRepository(Repository):
         self._clone_uri: str = clone_uri
         self._entries: int = 0
         self._tempdir: TemporaryDirectory | None = None
-        super().__init__(Path(""))
+        super().__init__(Path())
 
     def __enter__(self) -> Self:
         self._entries += 1
@@ -194,8 +189,7 @@ class File:
         with self.repo:
             if self.path.is_symlink():
                 return File(self.path.readlink(), self.repo)
-            else:
-                return self
+            return self
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.relative_path!r}, {self.repo!r})"
@@ -295,18 +289,16 @@ class RemoteGitRepository(_ClonedRepository):
                 return result._replace(
                     path=f"{path}/blob/{for_rev}/{for_file.relative_path!s}"
                 ).geturl()
-            else:
-                return result._replace(path=f"{path}/commit/{for_rev}").geturl()
-        elif for_file is not None:
+            return result._replace(path=f"{path}/commit/{for_rev}").geturl()
+        if for_file is not None:
             url = self.url
             if url.endswith("/"):
                 url = url[:-1]
             if for_rev:
                 url = f"{url}@{for_rev}"
             return f"{url}/{for_file.relative_path!s}"
-        elif for_rev:
+        if for_rev:
             return f"{self.url}@{for_rev}"
-        else:
-            return self.url
+        return self.url
 
     __str__ = format_url

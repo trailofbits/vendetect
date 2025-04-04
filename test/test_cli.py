@@ -1,11 +1,8 @@
 """Tests for CLI functionality."""
 
 import json
-import os
-import subprocess
 import sys
 from io import StringIO
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -29,8 +26,9 @@ def mock_repositories(tmp_path, monkeypatch):
     source_file.write_text("def hello_world():\n    print('Hello, World!')\n")
 
     # Mock the detect method to avoid the repository File error
-    from vendetect.detector import VenDetector, Detection
     from unittest.mock import MagicMock
+
+    from vendetect.detector import VenDetector
 
     # Create mock detection result
     mock_detection = MagicMock()

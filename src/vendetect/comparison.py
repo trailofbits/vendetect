@@ -44,7 +44,7 @@ class Comparison:
     def __lt__(self, other: "Comparison") -> bool:
         if self.token_overlap > other.token_overlap:
             return True
-        elif self.token_overlap < other.token_overlap:
+        if self.token_overlap < other.token_overlap:
             return False
         oursim = self.similarity1 + self.similarity2
         theirsim = other.similarity1 + other.similarity2
@@ -54,8 +54,8 @@ class Comparison:
 class Comparator(ABC, Generic[F]):
     @abstractmethod
     def fingerprint(self, path: Path) -> F:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abstractmethod
     def compare(self, fp1: F, fp2: F) -> Comparison:
-        raise NotImplementedError()
+        raise NotImplementedError

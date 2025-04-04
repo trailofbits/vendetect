@@ -1,10 +1,10 @@
+import types
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import wraps
-from heapq import heappush, heappop
+from heapq import heappop, heappush
 from logging import getLogger
-import types
-from typing import Callable, Iterable, Iterator
 
 from numpy import ndarray
 from pygments import lexer, lexers
@@ -12,7 +12,7 @@ from pygments.util import ClassNotFound
 
 from .comparison import Comparator, Comparison
 from .copydetect import CopyDetectComparator
-from .repo import Repository, File
+from .repo import File, Repository
 
 log = getLogger(__name__)
 
@@ -63,14 +63,13 @@ class Source:
         file_str = str(self.file)
         if file_str.startswith("http"):
             slices = ";".join(
-                (f"L{from_pos}-L{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist()))
+                (f"L{from_pos}-L{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist(), strict=False))
             )
             return f"{self.file!s}#{slices}"
-        else:
-            slices = ";".join(
-                (f"{from_pos}-{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist()))
-            )
-            return f"{self.file!s}:{slices}"
+        slices = ";".join(
+            (f"{from_pos}-{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist(), strict=False))
+        )
+        return f"{self.file!s}:{slices}"
 
 
 @dataclass(frozen=True, unsafe_hash=True)

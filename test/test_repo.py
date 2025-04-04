@@ -5,7 +5,6 @@ from unittest import TestCase
 
 from vendetect.repo import Repository, RepositoryCommit
 
-
 REPO_ROOT = Path(__file__).parent.parent
 
 

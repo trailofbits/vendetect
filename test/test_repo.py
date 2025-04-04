@@ -17,16 +17,11 @@ class TestRepo(TestCase):
             os.chdir(REPO_ROOT)
             files = list(repo.files())
             self.assertEqual(len(files), len(frozenset(files)), "Paths are not unique")
-            for expected in (
-                ".gitignore",
-                "LICENSE",
-                "Makefile",
-                "README.md"
-            ):
-                self.assertTrue(any(
-                    p.relative_path.name == expected
-                    for p in files
-                ), f"Missing expected file: {expected}")
+            for expected in (".gitignore", "LICENSE", "Makefile", "README.md"):
+                self.assertTrue(
+                    any(p.relative_path.name == expected for p in files),
+                    f"Missing expected file: {expected}",
+                )
         finally:
             os.chdir(old_cwd)
 

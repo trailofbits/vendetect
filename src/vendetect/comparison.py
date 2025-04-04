@@ -11,6 +11,7 @@ F = TypeVar("F")
 @dataclass(frozen=True)
 class Comparison:
     """Number of overlapping tokens between the two files"""
+
     token_overlap: int
 
     """number of overlapping tokens divided by the total number of tokens in the first file"""
@@ -30,8 +31,15 @@ class Comparison:
     slices2: ndarray
 
     def __hash__(self):
-        return hash((self.token_overlap, self.similarity1, self.similarity2, self.slices1.tobytes(),
-                     self.slices2.tobytes()))
+        return hash(
+            (
+                self.token_overlap,
+                self.similarity1,
+                self.similarity2,
+                self.slices1.tobytes(),
+                self.slices2.tobytes(),
+            )
+        )
 
     def __lt__(self, other: "Comparison") -> bool:
         if self.token_overlap > other.token_overlap:

@@ -21,6 +21,7 @@ from .repo import File, Repository
 
 logger = logging.getLogger(__name__)
 
+
 class RichStatus(Status):
     def __init__(self, console: Console):
         self.console: Console = console
@@ -36,7 +37,9 @@ class RichStatus(Status):
         self.progress.__exit__(exc_type, exc_val, exc_tb)
 
     def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]):
-        self.compare_tasks.append(self.progress.add_task(f":magnifying_glass_tilted_right: comparing…"))
+        self.compare_tasks.append(
+            self.progress.add_task(f":magnifying_glass_tilted_right: comparing…")
+        )
 
     def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]):
         self.progress.remove_task(self.compare_tasks[-1])
@@ -48,8 +51,10 @@ class RichStatus(Status):
     def update_compare_progress(self, file: File | None = None):
         self.progress.update(self.compare_tasks[-1], advance=1)
         if file is not None:
-            self.progress.update(self.compare_tasks[-1],
-                                 description=f":magnifying_glass_tilted_right: {file.relative_path.name!s}")
+            self.progress.update(
+                self.compare_tasks[-1],
+                description=f":magnifying_glass_tilted_right: {file.relative_path.name!s}",
+            )
 
 
 def output_csv(detections: Iterable[Detection], output_file=None):
@@ -69,16 +74,19 @@ def output_csv(detections: Iterable[Detection], output_file=None):
         test_slices = d.comparison.slices1
         source_slices = d.comparison.slices2
 
-        for (test_start, test_end), (source_start, source_end) in \
-                zip(zip(*test_slices.tolist()), zip(*source_slices.tolist())):
+        for (test_start, test_end), (source_start, source_end) in zip(
+            zip(*test_slices.tolist()), zip(*source_slices.tolist())
+        ):
             # Write one row per matched slice
-            csv_writer.writerow([
-                f"{d.test.relative_path!s}",
-                f"{d.source.relative_path!s}",
-                test_start,
-                test_end,
-                f"{avg_similarity:.4f}"
-            ])
+            csv_writer.writerow(
+                [
+                    f"{d.test.relative_path!s}",
+                    f"{d.source.relative_path!s}",
+                    test_start,
+                    test_end,
+                    f"{avg_similarity:.4f}",
+                ]
+            )
 
 
 def output_json(detections: Iterable[Detection], output_file=None):
@@ -99,16 +107,12 @@ def output_json(detections: Iterable[Detection], output_file=None):
         # Prepare slices data
         slices_data = []
         for i in range(len(test_slices[0])):
-            slices_data.append({
-                "test_slice": {
-                    "start": test_slices[0][i],
-                    "end": test_slices[1][i]
-                },
-                "source_slice": {
-                    "start": source_slices[0][i],
-                    "end": source_slices[1][i]
+            slices_data.append(
+                {
+                    "test_slice": {"start": test_slices[0][i], "end": test_slices[1][i]},
+                    "source_slice": {"start": source_slices[0][i], "end": source_slices[1][i]},
                 }
-            })
+            )
 
         # Create detection data
         detection_data = {
@@ -117,7 +121,7 @@ def output_json(detections: Iterable[Detection], output_file=None):
             "similarity": round(avg_similarity, 4),
             "similarity_test": round(d.comparison.similarity1, 4),
             "similarity_source": round(d.comparison.similarity2, 4),
-            "slices": slices_data
+            "slices": slices_data,
         }
 
         results.append(detection_data)
@@ -149,11 +153,7 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
         similarity_str = f"{avg_similarity:.1%}"
 
         # Add the main row with test and source files
-        table.add_row(
-            f"{d.test.relative_path!s}",
-            f"{d.source.relative_path!s}",
-            similarity_str
-        )
+        table.add_row(f"{d.test.relative_path!s}", f"{d.source.relative_path!s}", similarity_str)
 
         # Read file content for both test and source files
         def read_file_content(file):
@@ -171,15 +171,18 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
             test_slice_panels = []
             source_slice_panels = []
 
-            for (test_start, test_end), (source_start, source_end) in \
-                    zip(zip(*test_slices.tolist()), zip(*source_slices.tolist())):
+            for (test_start, test_end), (source_start, source_end) in zip(
+                zip(*test_slices.tolist()), zip(*source_slices.tolist())
+            ):
                 # Extract the content for the detected slices
                 test_lines = test_content.splitlines()
                 source_lines = source_content.splitlines()
 
                 # Convert character positions to line numbers (approximate)
-                test_slice_content = "\n".join(test_lines[max(0, test_start - 10):test_end + 10])
-                source_slice_content = "\n".join(source_lines[max(0, source_start - 10):source_end + 10])
+                test_slice_content = "\n".join(test_lines[max(0, test_start - 10) : test_end + 10])
+                source_slice_content = "\n".join(
+                    source_lines[max(0, source_start - 10) : source_end + 10]
+                )
 
                 # Create syntax-highlighted code panels
                 test_syntax = Syntax(
@@ -187,7 +190,7 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
                     lexer=get_lexer_for_filename(d.test.relative_path.name),
                     line_numbers=True,
                     start_line=max(1, test_start - 10),
-                    highlight_lines=set(range(max(1, test_start), test_end + 1))
+                    highlight_lines=set(range(max(1, test_start), test_end + 1)),
                 )
 
                 source_syntax = Syntax(
@@ -195,7 +198,7 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
                     lexer=get_lexer_for_filename(d.source.relative_path.name),
                     line_numbers=True,
                     start_line=max(1, source_start - 10),
-                    highlight_lines=set(range(max(1, source_start), source_end + 1))
+                    highlight_lines=set(range(max(1, source_start), source_end + 1)),
                 )
 
                 if test_slice_panels:
@@ -206,16 +209,19 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
 
             if test_slice_panels or source_slice_panels:
                 # Create side-by-side panels
-                test_panel = Panel(Group(*test_slice_panels), title=f"{d.test.relative_path.name!s}",
-                                   border_style="cyan")
-                source_panel = Panel(Group(*source_slice_panels), title=f"{d.source.relative_path.name!s}",
-                                     border_style="green")
+                test_panel = Panel(
+                    Group(*test_slice_panels),
+                    title=f"{d.test.relative_path.name!s}",
+                    border_style="cyan",
+                )
+                source_panel = Panel(
+                    Group(*source_slice_panels),
+                    title=f"{d.source.relative_path.name!s}",
+                    border_style="green",
+                )
 
                 context_panel = Panel.fit(
-                    Group(
-                        table,
-                        Columns([test_panel, source_panel])
-                    ),
+                    Group(table, Columns([test_panel, source_panel])),
                     title="Vendored Code",
                     border_style="red",
                     title_align="left",
@@ -242,27 +248,22 @@ def main() -> None:
     parser.add_argument("TEST_REPO", type=str, help="path to the test repository")
     parser.add_argument("SOURCE_REPO", type=str, help="path to the source repository")
     parser.add_argument(
-        "--format", 
-        type=str, 
-        choices=["rich", "csv", "json"], 
+        "--format",
+        type=str,
+        choices=["rich", "csv", "json"],
         default="rich",
-        help="output format (default: rich)"
+        help="output format (default: rich)",
+    )
+    parser.add_argument("--output", type=str, help="output file path (default: stdout)")
+    parser.add_argument(
+        "--force", action="store_true", help="force overwrite of existing output file"
     )
     parser.add_argument(
-        "--output", 
-        type=str, 
-        help="output file path (default: stdout)"
-    )
-    parser.add_argument(
-        "--force", 
-        action="store_true", 
-        help="force overwrite of existing output file"
-    )
-    parser.add_argument(
-        "--type", "-t",
+        "--type",
+        "-t",
         action="append",
         dest="file_types",
-        help="file extension to consider (can be used multiple times, e.g. `-t py -t c`)"
+        help="file extension to consider (can be used multiple times, e.g. `-t py -t c`)",
     )
 
     log_section = parser.add_argument_group(title="logging")
@@ -278,9 +279,7 @@ def main() -> None:
         ),
         help="sets the log level for deptective (default=INFO)",
     )
-    log_group.add_argument(
-        "--debug", action="store_true", help="equivalent to `--log-level=DEBUG`"
-    )
+    log_group.add_argument("--debug", action="store_true", help="equivalent to `--log-level=DEBUG`")
     log_group.add_argument(
         "--quiet",
         action="store_true",
@@ -293,10 +292,12 @@ def main() -> None:
     output_file = None
     if args.output:
         if not args.force and os.path.exists(args.output):
-            sys.stderr.write(f"Error: Output file {args.output} already exists. Use --force to overwrite.\n")
+            sys.stderr.write(
+                f"Error: Output file {args.output} already exists. Use --force to overwrite.\n"
+            )
             sys.exit(1)
         try:
-            output_file = open(args.output, 'w')
+            output_file = open(args.output, "w")
         except IOError as e:
             sys.stderr.write(f"Error: Could not open output file {args.output} for writing: {e}\n")
             sys.exit(1)
@@ -326,14 +327,18 @@ def main() -> None:
     traceback.install(show_locals=True)
 
     try:
-        with Repository.load(args.TEST_REPO) as test_repo, Repository.load(args.SOURCE_REPO) as source_repo, \
-                RichStatus(Console()) as status:
+        with (
+            Repository.load(args.TEST_REPO) as test_repo,
+            Repository.load(args.SOURCE_REPO) as source_repo,
+            RichStatus(Console()) as status,
+        ):
             vend = VenDetector(status=status)
-            
+
             # Get detections
             if not args.file_types:
                 file_filter: Callable[[File], bool] = lambda _: True
             else:
+
                 def file_filter(file: File) -> bool:
                     suffix = file.relative_path.suffix
                     if suffix in args.file_types:
@@ -349,7 +354,7 @@ def main() -> None:
                         return False
 
             detections = vend.detect(test_repo, source_repo, file_filter=file_filter)
-            
+
             # Output based on format
             if args.format == "csv":
                 output_csv(detections, output_file)

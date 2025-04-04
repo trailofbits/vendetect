@@ -45,16 +45,15 @@ class Source:
 
     def __hash__(self) -> int:
         return hash((self.file, self.source_slices.tobytes()))
-        
+
     def __eq__(self, other):
         if not isinstance(other, Source):
             return False
-        return (self.file == other.file and
-                (self.source_slices == other.source_slices).all())
+        return self.file == other.file and (self.source_slices == other.source_slices).all()
 
     def __lt__(self, other: "Source"):
         return self.file.relative_path < other.file.relative_path or (
-                self.file == other.file and (self.source_slices < other.source_slices).all()
+            self.file == other.file and (self.source_slices < other.source_slices).all()
         )
 
     def __repr__(self):
@@ -63,10 +62,14 @@ class Source:
     def __str__(self):
         file_str = str(self.file)
         if file_str.startswith("http"):
-            slices = ";".join((f"L{from_pos}-L{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist())))
+            slices = ";".join(
+                (f"L{from_pos}-L{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist()))
+            )
             return f"{self.file!s}#{slices}"
         else:
-            slices = ";".join((f"{from_pos}-{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist())))
+            slices = ";".join(
+                (f"{from_pos}-{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist()))
+            )
             return f"{self.file!s}:{slices}"
 
 
@@ -107,8 +110,10 @@ class VenDetector:
         @wraps(func)
         def wrapper(self: "VenDetector", *args, **kwargs):
             if not hasattr(self.status, f"on_{func.__name__}"):
-                raise TypeError(f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required for "
-                                f"@callback on {self.__class__.__name__}.{func.__name__}")
+                raise TypeError(
+                    f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required for "
+                    f"@callback on {self.__class__.__name__}.{func.__name__}"
+                )
             callback_func = getattr(self.status, f"on_{func.__name__}")
             callback_func(*args, **kwargs)
             ret = func(self, *args, **kwargs)
@@ -137,7 +142,9 @@ class VenDetector:
             for lst, files in ((tf, test_files), (sf, source_files)):
                 for file in files:
                     if get_lexer_for_filename(file.path.name) is None:
-                        log.warning(f"Ignoring {file!s} because we do not have a lexer for its filetype")
+                        log.warning(
+                            f"Ignoring {file!s} because we do not have a lexer for its filetype"
+                        )
                     else:
                         lst.append(file)
 
@@ -185,7 +192,9 @@ class VenDetector:
         """Finds the most probable point in the test repo and source repo when the given detection was vendored"""
         log.info(f"Finding the most probable commit in which {detection.test_source!s} was copied…")
         best: Detection = detection
-        to_test: list[tuple[Repository, Repository]] = [(detection.test_repo, detection.source_repo)]
+        to_test: list[tuple[Repository, Repository]] = [
+            (detection.test_repo, detection.source_repo)
+        ]
         history: set[tuple[Repository | None, Repository | None]] = set()
         while to_test:
             test_repo, source_repo = to_test.pop()
@@ -206,10 +215,14 @@ class VenDetector:
                 to_test.append((spv, source_repo))
         return best
 
-    def detect(self, test_repo: Repository, source_repo: Repository,
-               file_filter: Callable[[File], bool] = lambda _: True) -> Iterator[Detection]:
+    def detect(
+        self,
+        test_repo: Repository,
+        source_repo: Repository,
+        file_filter: Callable[[File], bool] = lambda _: True,
+    ) -> Iterator[Detection]:
         for d in self.compare(
-                (f for f in test_repo.files() if file_filter(f)),
-                (f for f in source_repo.files() if file_filter(f))
+            (f for f in test_repo.files() if file_filter(f)),
+            (f for f in source_repo.files() if file_filter(f)),
         ):
             yield self.find_probable_copy(d)

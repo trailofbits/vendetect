@@ -29,9 +29,11 @@ class Repository:
         self.rev: str = ""
         with self:
             if self.is_git:
-                self.rev = subprocess.check_output(
-                    ["git", "rev-parse", "HEAD"], cwd=self.root_path
-                ).strip().decode("utf-8")
+                self.rev = (
+                    subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root_path)
+                    .strip()
+                    .decode("utf-8")
+                )
 
     def __hash__(self) -> int:
         if self.rev:
@@ -63,9 +65,25 @@ class Repository:
             return None
         if path.is_absolute():
             path = path.relative_to(self.root_path)
-        prev_version = subprocess.check_output([
-            GIT_PATH, "log", "-n", "1", "--skip", "1", "--pretty=format:\"%H\"", "--follow", "--", str(path)
-        ], cwd=self.root_path).decode("utf-8").strip()
+        prev_version = (
+            subprocess.check_output(
+                [
+                    GIT_PATH,
+                    "log",
+                    "-n",
+                    "1",
+                    "--skip",
+                    "1",
+                    '--pretty=format:"%H"',
+                    "--follow",
+                    "--",
+                    str(path),
+                ],
+                cwd=self.root_path,
+            )
+            .decode("utf-8")
+            .strip()
+        )
         if prev_version.startswith('"') and prev_version.endswith('"'):
             prev_version = prev_version[1:-1]
         if prev_version:
@@ -82,7 +100,9 @@ class Repository:
     def git_files(self) -> Iterator["File"]:
         if GIT_PATH is None:
             raise RuntimeError("`git` binary could not be found")
-        for line in subprocess.check_output([str(GIT_PATH), "ls-files"], cwd=self.root_path).splitlines():
+        for line in subprocess.check_output(
+            [str(GIT_PATH), "ls-files"], cwd=self.root_path
+        ).splitlines():
             line = line.strip()
             if line:
                 path = Path(line.decode("utf-8"))
@@ -139,8 +159,11 @@ class _ClonedRepository(Repository):
         if self._entries == 1:
             self._tempdir = TemporaryDirectory()
             self.root_path = Path(self._tempdir.__enter__())
-            subprocess.check_call([GIT_PATH, "clone", str(self._clone_uri), "."], cwd=self.root_path,
-                                  stderr=subprocess.DEVNULL)
+            subprocess.check_call(
+                [GIT_PATH, "clone", str(self._clone_uri), "."],
+                cwd=self.root_path,
+                stderr=subprocess.DEVNULL,
+            )
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -198,7 +221,9 @@ class RepositoryCommit(_ClonedRepository):
     def _enter(self) -> Self:
         ret = super().__enter__()
         if self._entries == 1:
-            subprocess.check_call([GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL)
+            subprocess.check_call(
+                [GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL
+            )
         return ret
 
     def __enter__(self) -> Self:
@@ -254,7 +279,11 @@ class RemoteGitRepository(_ClonedRepository):
                 for_rev = self.rev
             elif for_file:
                 # get the latest commit from the remote repo
-                for_rev = subprocess.check_output(["git", "ls-remote", self.url, "HEAD"]).split()[0].decode("utf-8")
+                for_rev = (
+                    subprocess.check_output(["git", "ls-remote", self.url, "HEAD"])
+                    .split()[0]
+                    .decode("utf-8")
+                )
         result = urlparse(self.url)
         if result.netloc == "github.com" and for_rev:
             path = result.path
@@ -263,7 +292,9 @@ class RemoteGitRepository(_ClonedRepository):
             if path.endswith(".git"):
                 path = path[:-4]
             if for_file is not None:
-                return result._replace(path=f"{path}/blob/{for_rev}/{for_file.relative_path!s}").geturl()
+                return result._replace(
+                    path=f"{path}/blob/{for_rev}/{for_file.relative_path!s}"
+                ).geturl()
             else:
                 return result._replace(path=f"{path}/commit/{for_rev}").geturl()
         elif for_file is not None:

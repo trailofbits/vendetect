@@ -227,7 +227,7 @@ class RepositoryCommit(_ClonedRepository):
         root = self.root
         if isinstance(root, RemoteGitRepository):
             return root.format_url()
-        return f"{self.root.root_path!s}@{self.rev}"
+        return f"{self.root.root_path!s}@{self.rev[:8]}"
 
 
 class RemoteGitRepository(_ClonedRepository):

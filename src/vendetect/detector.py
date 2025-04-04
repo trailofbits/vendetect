@@ -60,6 +60,15 @@ class Source:
     def __repr__(self):
         return f"{self.__class__.__name__}({self.file!r}, {self.source_slices!r})"
 
+    def __str__(self):
+        file_str = str(self.file)
+        if file_str.startswith("http"):
+            slices = ";".join((f"L{from_pos}-L{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist())))
+            return f"{self.file!s}#{slices}"
+        else:
+            slices = ";".join((f"{from_pos}-{to_pos}" for from_pos, to_pos in zip(*self.source_slices.tolist())))
+            return f"{self.file!s}:{slices}"
+
 
 @dataclass(frozen=True, unsafe_hash=True)
 class Detection:

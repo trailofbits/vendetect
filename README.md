@@ -72,9 +72,28 @@ vendetect /path/to/my/project https://github.com/example/repo.git
 ### Options
 
 ```
+--format FORMAT    Output format: rich, csv, or json (default=rich)
 --log-level LEVEL  Sets the log level (default=INFO)
 --debug            Equivalent to --log-level=DEBUG
 --quiet            Equivalent to --log-level=CRITICAL
+```
+
+### Output Formats
+
+Vendetect supports three output formats:
+
+1. **rich** (default): Interactive console output with syntax highlighting and side-by-side code comparison
+2. **csv**: Comma-separated values format with columns for Test File, Source File, Slice Start, Slice End, and Similarity
+3. **json**: JSON format with detailed information about each detection, including file paths, similarity scores, and matched code slices
+
+Example using CSV output:
+```bash
+vendetect /path/to/my/project /path/to/another/project --format csv > results.csv
+```
+
+Example using JSON output:
+```bash
+vendetect /path/to/my/project /path/to/another/project --format json > results.json
 ```
 
 ## How it works 🧐

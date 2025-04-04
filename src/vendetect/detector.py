@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import wraps
 from heapq import heappop, heappush
 from logging import getLogger
+from typing import Any
 
 from pygments import lexer, lexers
 from pygments.util import ClassNotFound
@@ -24,16 +25,18 @@ def get_lexer_for_filename(filename: str) -> lexer.Lexer | None:
 
 
 class Status:
-    def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]):
+    def on_compare(
+            self, test_files: Iterable[File], source_files: Iterable[File]
+    ) -> None | tuple[Iterable[File], Iterable[File]]:
+        return None
+
+    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:
         pass
 
-    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]):
+    def update_num_comparisons(self, num: int) -> None:
         pass
 
-    def update_num_comparisons(self, num: int):
-        pass
-
-    def update_compare_progress(self, file: File | None = None):
+    def update_compare_progress(self, file: File | None = None) -> None:
         pass
 
 
@@ -42,20 +45,20 @@ class Source:
     file: File
     source_slices: tuple[Slice, ...]
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Source):
             return False
         return self.file == other.file and self.source_slices == other.source_slices
 
-    def __lt__(self, other: "Source"):
+    def __lt__(self, other: "Source") -> bool:
         return self.file.relative_path < other.file.relative_path or (
             self.file == other.file and self.source_slices < other.source_slices
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.file!r}, {self.source_slices!r})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         file_str = str(self.file)
         if file_str.startswith("http"):
             slices = ";".join(f"L{s.from_index}-L{s.to_index}" for s in self.source_slices)
@@ -70,7 +73,7 @@ class Detection:
     source: File
     comparison: Comparison
 
-    def __lt__(self, other: "Detection"):
+    def __lt__(self, other: "Detection") -> bool:
         return self.comparison < other.comparison
 
     @property
@@ -97,38 +100,40 @@ class VenDetector:
             self.status = status
 
     @staticmethod
-    def callback(func):
+    def callback(func):  # type: ignore
         @wraps(func)
-        def wrapper(self: "VenDetector", *args, **kwargs):
+        def wrapper(self: "VenDetector", *args, **kwargs):  # type: ignore
             if not hasattr(self.status, f"on_{func.__name__}"):
                 raise TypeError(
                     f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required for "
                     f"@callback on {self.__class__.__name__}.{func.__name__}"
                 )
             callback_func = getattr(self.status, f"on_{func.__name__}")
-            callback_func(*args, **kwargs)
-            ret = func(self, *args, **kwargs)
+            modified_args = callback_func(*args, **kwargs)
+            if modified_args is None:
+                modified_args = args
+            ret = func(self, *modified_args, **kwargs)
             is_generator = isinstance(ret, types.GeneratorType)
             if is_generator:
                 yield from ret
             if hasattr(self.status, f"{func.__name__}_completed"):
-                getattr(self.status, f"{func.__name__}_completed")(*args, **kwargs)
+                getattr(self.status, f"{func.__name__}_completed")(*modified_args, **kwargs)
             if not is_generator:
                 return ret
 
         return wrapper
 
     @callback
-    def compare(self, test_files: Iterable[File], source_files: Iterable[File]):
-        test_files = tuple(test_files)
-        source_files = tuple(source_files)
+    def compare(self, test_files: Iterable[File], source_files: Iterable[File]) -> Iterator[Detection]:
+        test_files: Iterable[File] = tuple(test_files)
+        source_files: Iterable[File] = tuple(source_files)
 
         with ExitStack() as stack:
             for repo in {f.repo for f in test_files} | {f.repo for f in source_files}:
                 stack.enter_context(repo)
 
-            tf = []
-            sf = []
+            tf: list[File] = []
+            sf: list[File] = []
 
             for lst, files in ((tf, test_files), (sf, source_files)):
                 for file in files:

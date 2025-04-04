@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 from collections.abc import Callable, Iterable
+from typing import TextIO
 
 from rich import traceback
 from rich.columns import Columns
@@ -28,36 +29,36 @@ class RichStatus(Status):
         self.progress: Progress | None = None
         self.compare_tasks: list[TaskID] = []
 
-    def __enter__(self):
+    def __enter__(self):  # type: ignore
         self.progress = Progress(console=self.console, transient=True)
         self.progress.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.progress.__exit__(exc_type, exc_val, exc_tb)
+    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
+        self.progress.__exit__(exc_type, exc_val, exc_tb)  # type: ignore
 
-    def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]):
+    def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:
         self.compare_tasks.append(
-            self.progress.add_task(":magnifying_glass_tilted_right: comparing…")
+            self.progress.add_task(":magnifying_glass_tilted_right: comparing…")  # type: ignore
         )
 
-    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]):
-        self.progress.remove_task(self.compare_tasks[-1])
+    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:
+        self.progress.remove_task(self.compare_tasks[-1])  # type: ignore
         self.compare_tasks.pop()
 
-    def update_num_comparisons(self, num: int):
-        self.progress.update(self.compare_tasks[-1], total=num)
+    def update_num_comparisons(self, num: int) -> None:
+        self.progress.update(self.compare_tasks[-1], total=num)  # type: ignore
 
-    def update_compare_progress(self, file: File | None = None):
-        self.progress.update(self.compare_tasks[-1], advance=1)
+    def update_compare_progress(self, file: File | None = None) -> None:
+        self.progress.update(self.compare_tasks[-1], advance=1)  # type: ignore
         if file is not None:
-            self.progress.update(
+            self.progress.update(  # type: ignore
                 self.compare_tasks[-1],
                 description=f":magnifying_glass_tilted_right: {file.relative_path.name!s}",
             )
 
 
-def output_csv(detections: Iterable[Detection], output_file=None):
+def output_csv(detections: Iterable[Detection], output_file: TextIO | None = None) -> None:
     output = output_file if output_file else sys.stdout
     csv_writer = csv.writer(output)
     # Write header
@@ -101,7 +102,7 @@ def output_csv(detections: Iterable[Detection], output_file=None):
             )
 
 
-def output_json(detections: Iterable[Detection], output_file=None):
+def output_json(detections: Iterable[Detection], output_file: TextIO | None = None) -> None:
     results = []
     output = output_file if output_file else sys.stdout
 
@@ -144,7 +145,7 @@ def output_json(detections: Iterable[Detection], output_file=None):
     json.dump(results, output, indent=2)
 
 
-def output_rich(detections: Iterable[Detection], console, output_file=None):
+def output_rich(detections: Iterable[Detection], console: Console, output_file: TextIO | None = None) -> None:
     # If an output file is specified, create a new Console for it
     if output_file:
         file_console = Console(file=output_file)
@@ -170,7 +171,7 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
         table.add_row(f"{d.test.relative_path!s}", f"{d.source.relative_path!s}", similarity_str)
 
         # Read file content for both test and source files
-        def read_file_content(file):
+        def read_file_content(file: File) -> str:
             with file.repo:
                 return file.path.read_text()
 
@@ -182,8 +183,8 @@ def output_rich(detections: Iterable[Detection], console, output_file=None):
             test_slices = d.comparison.slices1
             source_slices = d.comparison.slices2
 
-            test_slice_panels = []
-            source_slice_panels = []
+            test_slice_panels: list[Text | Syntax] = []
+            source_slice_panels: list[Text | Syntax] = []
 
             for (test_start, test_end), (source_start, source_end) in zip(
                 test_slices, source_slices, strict=False

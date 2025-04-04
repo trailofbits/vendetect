@@ -6,7 +6,7 @@ from typing import Generic, TypeVar
 
 from numpy import ndarray
 
-C = TypeVar("C")
+C = TypeVar("C", bound="Slice")
 F = TypeVar("F")
 
 
@@ -15,13 +15,13 @@ class Slice:
     from_index: int
     to_index: int
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.from_index}, {self.to_index})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.from_index}–{self.to_index}"
 
-    def __len__(self):
+    def __len__(self) -> int:
         return 2
 
     def __getitem__(self, index: int) -> int:

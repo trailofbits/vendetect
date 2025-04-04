@@ -6,19 +6,21 @@ from functools import wraps
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Optional, Self
+from typing import Any, Callable, Optional, ParamSpec, Self, TypeVar, cast
 from urllib.parse import urlparse
 
-GIT_PATH: Path | None = shutil.which("git")
+GIT_PATH: str | None = shutil.which("git")
 
 log = getLogger(__name__)
 
+T = TypeVar('T')
+P = ParamSpec('P')
 
-def with_self(func):
+def with_self(func: Callable[P, T]) -> Callable[P, T]:
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        with self:
-            return func(self, *args, **kwargs)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        with args[0]:  # type: ignore
+            return func(*args, **kwargs)
 
     return wrapper
 
@@ -43,7 +45,7 @@ class Repository:
             return hash(self.rev)
         return hash(self.root_path)
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Repository):
             return False
         if self.rev and other.rev:
@@ -52,11 +54,11 @@ class Repository:
             return False
         return self.root_path == other.root_path
 
-    def __enter__(self) -> "Repository":
+    def __enter__(self) -> Self:
         # print(f"Entering {self!r}")
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
         # print(f"Exiting {self!r}")
         pass
 
@@ -101,7 +103,7 @@ class Repository:
         if GIT_PATH is None:
             raise RuntimeError("`git` binary could not be found")
         for line in subprocess.check_output(
-            [str(GIT_PATH), "ls-files"], cwd=self.root_path
+            [GIT_PATH, "ls-files"], cwd=self.root_path
         ).splitlines():
             line = line.strip()
             if line:
@@ -111,7 +113,7 @@ class Repository:
     @with_self
     def files(self) -> Iterator["File"]:
         if GIT_PATH is None or not self.is_git:
-            stack: list[File] = [self.root_path]
+            stack: list[File] = [File(self.root_path, self)]
         else:
             stack = list(reversed(list(self.git_files())))
         history = set()
@@ -121,17 +123,17 @@ class Repository:
                 continue
             history.add(file)
             if file.path.is_dir():
-                stack.extend(reversed(list(file.path.iterdir())))
+                stack.extend((File(p, self) for p in reversed(list(file.path.iterdir()))))
             elif file.path.is_file():
                 yield file
 
     def __iter__(self) -> Iterator["File"]:
         yield from self.files()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.root_path!r})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.rev:
             return f"{self.root_path!s}@{self.rev}"
         return f"{self.root_path!s}"
@@ -158,16 +160,16 @@ class _ClonedRepository(Repository):
             self._tempdir = TemporaryDirectory()
             self.root_path = Path(self._tempdir.__enter__())
             subprocess.check_call(
-                [GIT_PATH, "clone", str(self._clone_uri), "."],
+                [GIT_PATH, "clone", str(self._clone_uri), "."],  # type: ignore
                 cwd=self.root_path,
                 stderr=subprocess.DEVNULL,
             )
         return super().__enter__()
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
         self._entries -= 1
         if self._entries == 0:
-            self._tempdir.__exit__(exc_type, exc_val, exc_tb)
+            self._tempdir.__exit__(exc_type, exc_val, exc_tb)  # type: ignore
             self._tempdir = None
         super().__exit__(exc_type, exc_val, exc_tb)
 
@@ -191,13 +193,13 @@ class File:
     def resolve(self) -> Self:
         with self.repo:
             if self.path.is_symlink():
-                return File(self.path.readlink(), self.repo)
+                return self.__class__(self.path.readlink(), self.repo)
             return self
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.relative_path!r}, {self.repo!r})"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.repo!s}/{self.relative_path!s}"
 
 
@@ -219,7 +221,7 @@ class RepositoryCommit(_ClonedRepository):
         ret = super().__enter__()
         if self._entries == 1:
             subprocess.check_call(
-                [GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL
+                [GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL  # type: ignore
             )
         return ret
 
@@ -229,25 +231,26 @@ class RepositoryCommit(_ClonedRepository):
                 a._enter()
             else:
                 a.__enter__()
+        return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
         for a in self._ancestors():
             if a is self:
                 super().__exit__(exc_type, exc_val, exc_tb)
             else:
                 a.__exit__(exc_type, exc_val, exc_tb)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.repo!r}, {self.rev!r})"
 
     @property
     def root(self) -> Repository:
-        r = self
+        r: Repository = self
         while isinstance(r, RepositoryCommit):
             r = r.repo
         return r
 
-    def __str__(self):
+    def __str__(self) -> str:
         root = self.root
         if isinstance(root, RemoteGitRepository):
             return root.format_url()
@@ -259,9 +262,10 @@ class RemoteGitRepository(_ClonedRepository):
         self.url: str = url
         super().__init__(url, rev="")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.url!r})"
 
+    @property
     def is_git(self) -> bool:
         return True
 

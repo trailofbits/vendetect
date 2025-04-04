@@ -1,20 +1,21 @@
 import shutil
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import wraps
 from logging import getLogger
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Callable, Optional, ParamSpec, Self, TypeVar, cast
+from typing import Optional, ParamSpec, Self, TypeVar
 from urllib.parse import urlparse
 
 GIT_PATH: str | None = shutil.which("git")
 
 log = getLogger(__name__)
 
-T = TypeVar('T')
-P = ParamSpec('P')
+T = TypeVar("T")
+P = ParamSpec("P")
+
 
 def with_self(func: Callable[P, T]) -> Callable[P, T]:
     @wraps(func)
@@ -45,7 +46,7 @@ class Repository:
             return hash(self.rev)
         return hash(self.root_path)
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Repository):
             return False
         if self.rev and other.rev:
@@ -123,7 +124,7 @@ class Repository:
                 continue
             history.add(file)
             if file.path.is_dir():
-                stack.extend((File(p, self) for p in reversed(list(file.path.iterdir()))))
+                stack.extend(File(p, self) for p in reversed(list(file.path.iterdir())))
             elif file.path.is_file():
                 yield file
 
@@ -221,7 +222,9 @@ class RepositoryCommit(_ClonedRepository):
         ret = super().__enter__()
         if self._entries == 1:
             subprocess.check_call(
-                [GIT_PATH, "checkout", self.rev], cwd=self.root_path, stderr=subprocess.DEVNULL  # type: ignore
+                [GIT_PATH, "checkout", self.rev],
+                cwd=self.root_path,
+                stderr=subprocess.DEVNULL,  # type: ignore
             )
         return ret
 

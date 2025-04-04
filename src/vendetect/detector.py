@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from functools import wraps
 from heapq import heappop, heappush
 from logging import getLogger
-from typing import Any
 
 from pygments import lexer, lexers
 from pygments.util import ClassNotFound
@@ -26,7 +25,7 @@ def get_lexer_for_filename(filename: str) -> lexer.Lexer | None:
 
 class Status:
     def on_compare(
-            self, test_files: Iterable[File], source_files: Iterable[File]
+        self, test_files: Iterable[File], source_files: Iterable[File]
     ) -> None | tuple[Iterable[File], Iterable[File]]:
         return None
 
@@ -45,7 +44,7 @@ class Source:
     file: File
     source_slices: tuple[Slice, ...]
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Source):
             return False
         return self.file == other.file and self.source_slices == other.source_slices
@@ -124,7 +123,9 @@ class VenDetector:
         return wrapper
 
     @callback
-    def compare(self, test_files: Iterable[File], source_files: Iterable[File]) -> Iterator[Detection]:
+    def compare(
+        self, test_files: Iterable[File], source_files: Iterable[File]
+    ) -> Iterator[Detection]:
         test_files: Iterable[File] = tuple(test_files)
         source_files: Iterable[File] = tuple(source_files)
 

@@ -145,7 +145,9 @@ def output_json(detections: Iterable[Detection], output_file: TextIO | None = No
     json.dump(results, output, indent=2)
 
 
-def output_rich(detections: Iterable[Detection], console: Console, output_file: TextIO | None = None) -> None:
+def output_rich(
+    detections: Iterable[Detection], console: Console, output_file: TextIO | None = None
+) -> None:
     # If an output file is specified, create a new Console for it
     if output_file:
         file_console = Console(file=output_file)

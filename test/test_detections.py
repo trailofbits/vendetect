@@ -1,11 +1,14 @@
 from pathlib import Path
 from unittest import TestCase
 
+import pytest
+
 from vendetect.detector import VenDetector
-from vendetect.repo import RemoteGitRepository, Repository
+from vendetect.repo import GIT_PATH, RemoteGitRepository, Repository
 
 
 class TestVenDetect(TestCase):
+    @pytest.mark.skipif(GIT_PATH is None, reason="requires git")
     def test_detect(self):  # noqa: ANN201
         with (
             Repository(Path(__file__).parent.parent) as test_repo,

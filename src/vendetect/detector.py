@@ -4,7 +4,7 @@ from functools import wraps
 from heapq import heappush, heappop
 from logging import getLogger
 import types
-from typing import Iterable, Iterator
+from typing import Callable, Iterable, Iterator
 
 from numpy import ndarray
 from pygments import lexer, lexers
@@ -206,6 +206,10 @@ class VenDetector:
                 to_test.append((spv, source_repo))
         return best
 
-    def detect(self, test_repo: Repository, source_repo: Repository) -> Iterator[Detection]:
-        for d in self.compare(test_repo.files(), source_repo.files()):
+    def detect(self, test_repo: Repository, source_repo: Repository,
+               file_filter: Callable[[File], bool] = lambda _: True) -> Iterator[Detection]:
+        for d in self.compare(
+                (f for f in test_repo.files() if file_filter(f)),
+                (f for f in source_repo.files() if file_filter(f))
+        ):
             yield self.find_probable_copy(d)

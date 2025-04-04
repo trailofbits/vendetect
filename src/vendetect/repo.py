@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from functools import wraps
+from logging import getLogger
 from pathlib import Path
 import shutil
 import subprocess
@@ -9,6 +10,8 @@ from urllib.parse import urlparse
 
 
 GIT_PATH: Path | None = shutil.which("git")
+
+log = getLogger(__name__)
 
 
 def with_self(func):
@@ -23,13 +26,12 @@ def with_self(func):
 class Repository:
     def __init__(self, root_path: Path):
         self.root_path: Path = root_path
+        self.rev: str = ""
         with self:
             if self.is_git:
-                self.rev: str = subprocess.check_output(
+                self.rev = subprocess.check_output(
                     ["git", "rev-parse", "HEAD"], cwd=self.root_path
                 ).strip().decode("utf-8")
-            else:
-                self.rev = ""
 
     def __hash__(self) -> int:
         if self.rev:
@@ -133,12 +135,12 @@ class _ClonedRepository(Repository):
         super().__init__(Path(""))
 
     def __enter__(self) -> Self:
-        if self._entries == 0:
+        self._entries += 1
+        if self._entries == 1:
             self._tempdir = TemporaryDirectory()
             self.root_path = Path(self._tempdir.__enter__())
             subprocess.check_call([GIT_PATH, "clone", str(self._clone_uri), "."], cwd=self.root_path,
                                   stderr=subprocess.DEVNULL)
-        self._entries += 1
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -238,14 +240,28 @@ class RemoteGitRepository(_ClonedRepository):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.url!r})"
 
+    def is_git(self) -> bool:
+        return True
+
+    def __enter__(self) -> Self:
+        if self._entries == 0:
+            log.info(f"⎘ cloning {self!s}…")
+        return super().__enter__()
+
     def format_url(self, for_file: File | None = None, for_rev: str | None = None) -> str:
-        if for_rev is None and self.rev:
-            for_rev = self.rev
+        if for_rev is None:
+            if self.rev:
+                for_rev = self.rev
+            elif for_file:
+                # get the latest commit from the remote repo
+                for_rev = subprocess.check_output(["git", "ls-remote", self.url, "HEAD"]).split()[0].decode("utf-8")
         result = urlparse(self.url)
         if result.netloc == "github.com" and for_rev:
             path = result.path
             if path.endswith("/"):
                 path = path[:-1]
+            if path.endswith(".git"):
+                path = path[:-4]
             if for_file is not None:
                 return result._replace(path=f"{path}/blob/{for_rev}/{for_file.relative_path!s}").geturl()
             else:

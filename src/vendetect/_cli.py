@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import sys
-from typing import Iterable, Dict, List, Any
+from typing import Callable, Iterable
 
 from rich.columns import Columns
 from rich.console import Console, Group
@@ -16,7 +16,7 @@ from rich.table import Table
 from rich.text import Text
 from rich import traceback
 
-from .detector import get_lexer_for_filename, Status, VenDetector
+from .detector import Detection, get_lexer_for_filename, Status, VenDetector
 from .repo import File, Repository
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class RichStatus(Status):
                                  description=f":magnifying_glass_tilted_right: {file.relative_path.name!s}")
 
 
-def output_csv(detections, output_file=None):
+def output_csv(detections: Iterable[Detection], output_file=None):
     output = output_file if output_file else sys.stdout
     csv_writer = csv.writer(output)
     # Write header
@@ -81,7 +81,7 @@ def output_csv(detections, output_file=None):
             ])
 
 
-def output_json(detections, output_file=None):
+def output_json(detections: Iterable[Detection], output_file=None):
     results = []
     output = output_file if output_file else sys.stdout
 
@@ -126,7 +126,7 @@ def output_json(detections, output_file=None):
     json.dump(results, output, indent=2)
 
 
-def output_rich(detections, console, output_file=None):
+def output_rich(detections: Iterable[Detection], console, output_file=None):
     # If an output file is specified, create a new Console for it
     if output_file:
         file_console = Console(file=output_file)
@@ -258,6 +258,12 @@ def main() -> None:
         action="store_true", 
         help="force overwrite of existing output file"
     )
+    parser.add_argument(
+        "--type", "-t",
+        action="append",
+        dest="file_types",
+        help="file extension to consider (can be used multiple times, e.g. `-t py -t c`)"
+    )
 
     log_section = parser.add_argument_group(title="logging")
     log_group = log_section.add_mutually_exclusive_group()
@@ -325,7 +331,24 @@ def main() -> None:
             vend = VenDetector(status=status)
             
             # Get detections
-            detections = list(vend.detect(test_repo, source_repo))
+            if not args.file_types:
+                file_filter: Callable[[File], bool] = lambda _: True
+            else:
+                def file_filter(file: File) -> bool:
+                    suffix = file.relative_path.suffix
+                    if suffix in args.file_types:
+                        return True
+                    elif suffix.startswith(".") and suffix[1:] in args.file_types:
+                        return True
+                    suffixes = "".join(file.relative_path.suffixes)
+                    if suffixes in args.file_types:
+                        return True
+                    elif suffixes.startswith(".") and suffixes[1:] in args.file_types:
+                        return True
+                    else:
+                        return False
+
+            detections = vend.detect(test_repo, source_repo, file_filter=file_filter)
             
             # Output based on format
             if args.format == "csv":

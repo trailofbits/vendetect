@@ -15,7 +15,7 @@ dependencies = [
     "copydetect>=0.5.0",
     "rich>=14.0.0",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 
 [tool.setuptools.dynamic]
 version = { attr = "vendetect.__version__" }

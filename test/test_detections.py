@@ -6,12 +6,10 @@ from vendetect.repo import RemoteGitRepository, Repository
 
 
 class TestVenDetect(TestCase):
-    def test_detect(self):
+    def test_detect(self):  # noqa: ANN201
         with (
             Repository(Path(__file__).parent.parent) as test_repo,
-            RemoteGitRepository(
-                "https://github.com/trailofbits/cookiecutter-python"
-            ) as source_repo,
+            RemoteGitRepository("https://github.com/trailofbits/cookiecutter-python") as source_repo,
         ):
             vend = VenDetector()
             self.assertTrue(
@@ -21,8 +19,7 @@ class TestVenDetect(TestCase):
                     for d in vend.detect(
                         test_repo,
                         source_repo,
-                        file_filter=lambda f: f.relative_path.name
-                        in ("Makefile", "LICENSE", "README.md"),
+                        file_filter=lambda f: f.relative_path.name in ("Makefile", "LICENSE", "README.md"),
                     )
                 )
             )

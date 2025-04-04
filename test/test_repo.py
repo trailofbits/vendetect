@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).parent.parent
 
 
 class TestRepo(TestCase):
-    def test_files(self):
+    def test_files(self):  # noqa: ANN201
         repo = Repository(REPO_ROOT)
         old_cwd = REPO_ROOT.cwd()
         try:
@@ -24,13 +24,10 @@ class TestRepo(TestCase):
         finally:
             os.chdir(old_cwd)
 
-    def test_prev_version(self):
+    def test_prev_version(self):  # noqa: ANN201
         repo = Repository(REPO_ROOT)
         prev: RepositoryCommit | None = repo.previous_version(Path("./pyproject.toml"))
-        if prev is None:
-            pct = contextlib.nullcontext
-        else:
-            pct = prev
+        pct = contextlib.nullcontext if prev is None else prev
         with pct:
             while prev is not None:
                 with prev:

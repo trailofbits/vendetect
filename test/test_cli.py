@@ -11,7 +11,7 @@ from vendetect._cli import main
 
 
 @pytest.fixture
-def mock_repositories(tmp_path, monkeypatch):
+def mock_repositories(tmp_path, monkeypatch):  # noqa: ANN201
     """Create mock test and source repositories for testing."""
     # Create test repo
     test_repo = tmp_path / "test_repo"
@@ -49,9 +49,8 @@ def mock_repositories(tmp_path, monkeypatch):
     mock_detection.source = source_file_mock
 
     # Mock the detect method
-    original_detect = VenDetector.detect
 
-    def mock_detect(self, test_repo, source_repo, file_filter=lambda _: True):
+    def mock_detect(self, test_repo, source_repo, file_filter=lambda _: True):  # noqa: ANN202, ARG001
         return [mock_detection]
 
     monkeypatch.setattr(VenDetector, "detect", mock_detect)
@@ -59,7 +58,7 @@ def mock_repositories(tmp_path, monkeypatch):
     return str(test_repo), str(source_repo)
 
 
-def test_output_format_csv(mock_repositories, capsys):
+def test_output_format_csv(mock_repositories, capsys):  # noqa: ANN201, ARG001
     """Test that CSV output format works."""
     test_repo, source_repo = mock_repositories
 
@@ -82,7 +81,7 @@ def test_output_format_csv(mock_repositories, capsys):
             pass  # Main might exit, which is fine
 
 
-def test_output_format_json(mock_repositories, capsys):
+def test_output_format_json(mock_repositories, capsys):  # noqa: ANN201, ARG001
     """Test that JSON output format works."""
     test_repo, source_repo = mock_repositories
 
@@ -106,7 +105,7 @@ def test_output_format_json(mock_repositories, capsys):
             pass  # Main might exit, which is fine
 
 
-def test_output_to_file(mock_repositories, tmp_path):
+def test_output_to_file(mock_repositories, tmp_path):  # noqa: ANN201
     """Test that output to a file works."""
     test_repo, source_repo = mock_repositories
     output_file = tmp_path / "output.csv"
@@ -134,7 +133,7 @@ def test_output_to_file(mock_repositories, tmp_path):
             pass  # Main might exit, which is fine
 
 
-def test_output_file_exists_no_force(mock_repositories, tmp_path):
+def test_output_file_exists_no_force(mock_repositories, tmp_path):  # noqa: ANN201
     """Test that the program exits when output file exists and --force is not used."""
     test_repo, source_repo = mock_repositories
     output_file = tmp_path / "existing.csv"
@@ -143,9 +142,7 @@ def test_output_file_exists_no_force(mock_repositories, tmp_path):
     output_file.write_text("existing content\n")
 
     # Patch sys.argv
-    with patch.object(
-        sys, "argv", ["vendetect", test_repo, source_repo, "--output", str(output_file)]
-    ):
+    with patch.object(sys, "argv", ["vendetect", test_repo, source_repo, "--output", str(output_file)]):
         with pytest.raises(SystemExit) as excinfo:
             main()
 
@@ -153,7 +150,7 @@ def test_output_file_exists_no_force(mock_repositories, tmp_path):
         assert excinfo.value.code == 1
 
 
-def test_output_file_exists_with_force(mock_repositories, tmp_path):
+def test_output_file_exists_with_force(mock_repositories, tmp_path):  # noqa: ANN201
     """Test that the program overwrites existing files when --force is used."""
     test_repo, source_repo = mock_repositories
     output_file = tmp_path / "existing.json"

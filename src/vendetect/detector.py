@@ -25,7 +25,9 @@ def get_lexer_for_filename(filename: str) -> lexer.Lexer | None:
 
 class Status:
     def on_compare(
-        self, test_files: Iterable[File], source_files: Iterable[File]
+        self,
+        test_files: Iterable[File],  # noqa: ARG002
+        source_files: Iterable[File],  # noqa: ARG002
     ) -> None | tuple[Iterable[File], Iterable[File]]:
         return None
 
@@ -99,14 +101,15 @@ class VenDetector:
             self.status = status
 
     @staticmethod
-    def callback(func):  # type: ignore
+    def callback(func):  # noqa: ANN205; type: ignore
         @wraps(func)
-        def wrapper(self: "VenDetector", *args, **kwargs):  # type: ignore
+        def wrapper(self: "VenDetector", *args, **kwargs):  # noqa: ANN202, ANN002, ANN003; type: ignore
             if not hasattr(self.status, f"on_{func.__name__}"):
-                raise TypeError(
-                    f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required for "
-                    f"@callback on {self.__class__.__name__}.{func.__name__}"
+                msg = (
+                    f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required "
+                    f"for @callback on {self.__class__.__name__}.{func.__name__}"
                 )
+                raise TypeError(msg)
             callback_func = getattr(self.status, f"on_{func.__name__}")
             modified_args = callback_func(*args, **kwargs)
             if modified_args is None:
@@ -123,7 +126,7 @@ class VenDetector:
         return wrapper
 
     @callback
-    def compare(
+    def compare(  # noqa: C901
         self, test_files: Iterable[File], source_files: Iterable[File]
     ) -> Iterator[Detection]:
         test_files: Iterable[File] = tuple(test_files)
@@ -140,7 +143,8 @@ class VenDetector:
                 for file in files:
                     if get_lexer_for_filename(file.path.name) is None:
                         log.warning(
-                            f"Ignoring {file!s} because we do not have a lexer for its filetype"
+                            "Ignoring %s because we do not have a lexer for its filetype",
+                            str(file),
                         )
                     else:
                         lst.append(file)
@@ -158,8 +162,8 @@ class VenDetector:
 
                 try:
                     fp1 = self.comparator.fingerprint(test_file.path)
-                except Exception as e:
-                    log.warning(f"Error fingerprinting {test_file!s}: {e!s}")
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Error fingerprinting %s: %s", str(test_file), str(e))
                     continue
 
                 for source_file in source_files:
@@ -167,8 +171,8 @@ class VenDetector:
 
                     try:
                         fp2 = self.comparator.fingerprint(source_file.path)
-                    except Exception as e:
-                        log.warning(f"Error fingerprinting {source_file!s}: {e!s}")
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("Error fingerprinting %s: %s", str(source_file), str(e))
                         continue
                     cmp = self.comparator.compare(fp1, fp2)
                     d = Detection(test_file, source_file, cmp)
@@ -186,19 +190,17 @@ class VenDetector:
             explored_sources.add(d.test_source)
 
     def find_probable_copy(self, detection: Detection) -> Detection:
-        """Finds the most probable point in the test repo and source repo when the given detection was vendored"""
-        log.info(f"Finding the most probable commit in which {detection.test_source!s} was copied…")
+        """Find the most probable point in the test repo and source repo when the given detection was vendored."""
+        log.info("Finding the most probable commit in which %s was copied…", str(detection.test_source))
         best: Detection = detection
-        to_test: list[tuple[Repository, Repository]] = [
-            (detection.test_repo, detection.source_repo)
-        ]
+        to_test: list[tuple[Repository, Repository]] = [(detection.test_repo, detection.source_repo)]
         history: set[tuple[Repository | None, Repository | None]] = set()
         while to_test:
             test_repo, source_repo = to_test.pop()
             if history:
                 new_detections = tuple(self.compare((detection.test,), (detection.source,)))
                 if new_detections:
-                    best = min(best, min(new_detections))
+                    best = min(best, *new_detections)
             pv = test_repo.previous_version(detection.test.relative_path)
             spv = source_repo.previous_version(detection.source.relative_path)
             if (pv, spv) in history:

@@ -67,7 +67,7 @@ warn_unused_configs = true
 warn_unused_ignores = true
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 include = ["src/**/*.py", "test/**/*.py"]
 
 [tool.ruff.lint]
@@ -75,7 +75,7 @@ select = ["ALL"]
 # D203 and D213 are incompatible with D211 and D212 respectively.
 # COM812 and ISC001 can cause conflicts when using ruff as a formatter.
 # See https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules.
-ignore = ["D203", "D213", "COM812", "ISC001"]
+ignore = ["ANN001", "ANN204", "D100", "D101", "D102", "D103", "D105", "D107", "D203", "D213", "COM812", "ISC001", "PGH003", "PT009"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/vendetect/_cli.py" = [

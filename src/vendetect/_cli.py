@@ -2,9 +2,9 @@ import argparse
 import csv
 import json
 import logging
-import os
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
+from pathlib import Path
 from typing import TextIO
 
 from rich import traceback
@@ -37,12 +37,12 @@ class RichStatus(Status):
     def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
         self.progress.__exit__(exc_type, exc_val, exc_tb)  # type: ignore
 
-    def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:
+    def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:  # noqa: ARG002
         self.compare_tasks.append(
             self.progress.add_task(":magnifying_glass_tilted_right: comparing…")  # type: ignore
         )
 
-    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:
+    def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:  # noqa: ARG002
         self.progress.remove_task(self.compare_tasks[-1])  # type: ignore
         self.compare_tasks.pop()
 
@@ -58,7 +58,7 @@ class RichStatus(Status):
             )
 
 
-def output_csv(detections: Iterable[Detection], output_file: TextIO | None = None) -> None:
+def output_csv(detections: Iterable[Detection], min_similarity: float = 0.5, output_file: TextIO | None = None) -> None:
     output = output_file if output_file else sys.stdout
     csv_writer = csv.writer(output)
     # Write header
@@ -78,16 +78,14 @@ def output_csv(detections: Iterable[Detection], output_file: TextIO | None = Non
         # Calculate overall similarity (average of both similarities)
         avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
 
-        if avg_similarity < 0.5:
+        if avg_similarity < min_similarity:
             break
 
         # Get slices
         test_slices = d.comparison.slices1
         source_slices = d.comparison.slices2
 
-        for (test_start, test_end), (source_start, source_end) in zip(
-            test_slices, source_slices, strict=False
-        ):
+        for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
             # Write one row per matched slice
             csv_writer.writerow(
                 [
@@ -102,7 +100,9 @@ def output_csv(detections: Iterable[Detection], output_file: TextIO | None = Non
             )
 
 
-def output_json(detections: Iterable[Detection], output_file: TextIO | None = None) -> None:
+def output_json(
+    detections: Iterable[Detection], min_similarity: float = 0.5, output_file: TextIO | None = None
+) -> None:
     results = []
     output = output_file if output_file else sys.stdout
 
@@ -110,7 +110,7 @@ def output_json(detections: Iterable[Detection], output_file: TextIO | None = No
         # Calculate overall similarity (average of both similarities)
         avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
 
-        if avg_similarity < 0.5:
+        if avg_similarity < min_similarity:
             break
 
         # Get slices
@@ -146,13 +146,13 @@ def output_json(detections: Iterable[Detection], output_file: TextIO | None = No
 
 
 def output_rich(
-    detections: Iterable[Detection], console: Console, output_file: TextIO | None = None
+    detections: Iterable[Detection],
+    console: Console,
+    min_similarity: float = 0.5,
+    output_file: TextIO | None = None,
 ) -> None:
     # If an output file is specified, create a new Console for it
-    if output_file:
-        file_console = Console(file=output_file)
-    else:
-        file_console = console
+    file_console = Console(file=output_file) if output_file else console
 
     for d in detections:
         # Create a table for the detection results
@@ -164,7 +164,7 @@ def output_rich(
         # Calculate overall similarity (average of both similarities)
         avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
 
-        if avg_similarity < 0.5:
+        if avg_similarity < min_similarity:
             break
 
         similarity_str = f"{avg_similarity:.1%}"
@@ -188,18 +188,14 @@ def output_rich(
             test_slice_panels: list[Text | Syntax] = []
             source_slice_panels: list[Text | Syntax] = []
 
-            for (test_start, test_end), (source_start, source_end) in zip(
-                test_slices, source_slices, strict=False
-            ):
+            for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
                 # Extract the content for the detected slices
                 test_lines = test_content.splitlines()
                 source_lines = source_content.splitlines()
 
                 # Convert character positions to line numbers (approximate)
                 test_slice_content = "\n".join(test_lines[max(0, test_start - 10) : test_end + 10])
-                source_slice_content = "\n".join(
-                    source_lines[max(0, source_start - 10) : source_end + 10]
-                )
+                source_slice_content = "\n".join(source_lines[max(0, source_start - 10) : source_end + 10])
 
                 # Create syntax-highlighted code panels
                 test_syntax = Syntax(
@@ -252,14 +248,14 @@ def output_rich(
                 # Just print the table if there are no specific slices
                 file_console.print(table)
                 file_console.print()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             # Fallback to basic output if there's an error reading or processing files
             file_console.print(table)
             file_console.print(f"[red]Error displaying code: {e}[/red]")
             file_console.print()
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901, PLR0912, PLR0915
     parser = argparse.ArgumentParser(prog="vendetect")
 
     parser.add_argument("TEST_REPO", type=str, help="path to the test repository")
@@ -272,15 +268,19 @@ def main() -> None:
         help="output format (default: rich)",
     )
     parser.add_argument("--output", type=str, help="output file path (default: stdout)")
-    parser.add_argument(
-        "--force", action="store_true", help="force overwrite of existing output file"
-    )
+    parser.add_argument("--force", action="store_true", help="force overwrite of existing output file")
     parser.add_argument(
         "--type",
         "-t",
         action="append",
         dest="file_types",
         help="file extension to consider (can be used multiple times, e.g. `-t py -t c`)",
+    )
+    parser.add_argument(
+        "--min-similarity",
+        type=float,
+        default=0.5,
+        help="the minimum similarity threshold to output a match (range: 0.0-1.0, default: 0.5)",
     )
 
     log_section = parser.add_argument_group(title="logging")
@@ -289,11 +289,7 @@ def main() -> None:
         "--log-level",
         type=str,
         default="INFO",
-        choices=list(
-            logging.getLevelName(x)
-            for x in range(1, 101)
-            if not logging.getLevelName(x).startswith("Level")
-        ),
+        choices=[logging.getLevelName(x) for x in range(1, 101) if not logging.getLevelName(x).startswith("Level")],
         help="sets the log level for deptective (default=INFO)",
     )
     log_group.add_argument("--debug", action="store_true", help="equivalent to `--log-level=DEBUG`")
@@ -305,20 +301,6 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Check for output file existence if --force is not specified
-    output_file = None
-    if args.output:
-        if not args.force and os.path.exists(args.output):
-            sys.stderr.write(
-                f"Error: Output file {args.output} already exists. Use --force to overwrite.\n"
-            )
-            sys.exit(1)
-        try:
-            output_file = open(args.output, "w")
-        except OSError as e:
-            sys.stderr.write(f"Error: Could not open output file {args.output} for writing: {e}\n")
-            sys.exit(1)
-
     if args.debug:
         numeric_log_level = logging.DEBUG
     elif args.quiet:
@@ -327,7 +309,7 @@ def main() -> None:
         log_level = getattr(logging, args.log_level.upper(), None)
         if not isinstance(log_level, int):
             sys.stderr.write(f"Invalid log level: {args.log_level}\n")
-            exit(1)
+            sys.exit(1)
         numeric_log_level = log_level
 
     console = Console(log_path=False, file=sys.stderr)
@@ -339,9 +321,19 @@ def main() -> None:
         handlers=[RichHandler(console=console)],
     )
 
-    # logging.getLogger("root").setLevel(logging.ERROR)
-
     traceback.install(show_locals=True)
+
+    # Check for output file existence if --force is not specified
+    output_file = None
+    if args.output:
+        if not args.force and Path(args.output).exists():
+            sys.stderr.write(f"Error: Output file {args.output} already exists. Use --force to overwrite.\n")
+            sys.exit(1)
+        try:
+            output_file = Path(args.output).open("w")  # noqa: SIM115
+        except OSError as e:
+            sys.stderr.write(f"Error: Could not open output file {args.output} for writing: {e}\n")
+            sys.exit(1)
 
     try:
         with (
@@ -353,35 +345,27 @@ def main() -> None:
 
             # Get detections
             if not args.file_types:
-                file_filter: Callable[[File], bool] = lambda _: True
+
+                def file_filter(_: File) -> bool:
+                    return True
             else:
 
                 def file_filter(file: File) -> bool:
                     suffix = file.relative_path.suffix
-                    if (
-                        suffix in args.file_types
-                        or suffix.startswith(".")
-                        and suffix[1:] in args.file_types
-                    ):
+                    if suffix in args.file_types or suffix.startswith(".") and suffix[1:] in args.file_types:
                         return True
                     suffixes = "".join(file.relative_path.suffixes)
-                    if (
-                        suffixes in args.file_types
-                        or suffixes.startswith(".")
-                        and suffixes[1:] in args.file_types
-                    ):
-                        return True
-                    return False
+                    return suffixes in args.file_types or suffixes.startswith(".") and suffixes[1:] in args.file_types
 
             detections = vend.detect(test_repo, source_repo, file_filter=file_filter)
 
             # Output based on format
             if args.format == "csv":
-                output_csv(detections, output_file)
+                output_csv(detections, args.min_similarity, output_file)
             elif args.format == "json":
-                output_json(detections, output_file)
+                output_json(detections, args.min_similarity, output_file)
             else:  # rich format
-                output_rich(detections, console, output_file)
+                output_rich(detections, console, args.min_similarity, output_file)
     finally:
         # Close the output file if it was opened
         if output_file and output_file != sys.stdout:

@@ -19,7 +19,7 @@ class Slice:
         return f"{self.__class__.__name__}({self.from_index}, {self.to_index})"
 
     def __str__(self) -> str:
-        return f"{self.from_index}–{self.to_index}"
+        return f"{self.from_index}–{self.to_index}"  # noqa: RUF001
 
     def __len__(self) -> int:
         return 2
@@ -29,7 +29,8 @@ class Slice:
             return self.from_index
         if index == 1:
             return self.to_index
-        raise IndexError(f"Invalid index: {index}")
+        msg = f"Invalid index: {index}"
+        raise IndexError(msg)
 
     def __iter__(self) -> Iterator[int]:
         yield self.from_index
@@ -42,8 +43,9 @@ class Slice:
 
 @dataclass(frozen=True, unsafe_hash=True)
 class Comparison:
-    """Number of overlapping tokens between the two files"""
+    """The result of a comparison between two files."""
 
+    """Number of overlapping tokens between the two files"""
     token_overlap: int
 
     """number of overlapping tokens divided by the total number of tokens in the first file"""

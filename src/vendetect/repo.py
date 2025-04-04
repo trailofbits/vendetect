@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from tempfile import TemporaryDirectory
 from typing import Iterator, Optional, Self
+from urllib.parse import urlparse
 
 
 GIT_PATH: Path | None = shutil.which("git")
@@ -147,6 +148,37 @@ class _ClonedRepository(Repository):
             self._tempdir = None
         super().__exit__(exc_type, exc_val, exc_tb)
 
+
+@dataclass(frozen=True, unsafe_hash=True, init=False)
+class File:
+    relative_path: Path
+    repo: Repository
+
+    def __init__(self, path: Path, repo: Repository):
+        if path.is_absolute():
+            path = path.relative_to(repo.root_path)
+        object.__setattr__(self, "relative_path", path)
+        object.__setattr__(self, "repo", repo)
+
+    @property
+    def path(self) -> Path:
+        with self.repo:
+            return self.repo.root_path / self.relative_path
+
+    def resolve(self) -> Self:
+        with self.repo:
+            if self.path.is_symlink():
+                return File(self.path.readlink(), self.repo)
+            else:
+                return self
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.relative_path!r}, {self.repo!r})"
+
+    def __str__(self):
+        return f"{self.repo!s}/{self.relative_path!s}"
+
+
 class RepositoryCommit(_ClonedRepository):
     def __init__(self, repo: Repository, commit: str):
         if isinstance(repo, RepositoryCommit):
@@ -156,7 +188,7 @@ class RepositoryCommit(_ClonedRepository):
         super().__init__(str(repo.root_path))
 
     def _ancestors(self) -> list[Repository]:
-        stack = [self]
+        stack: list[Repository] = [self]
         while isinstance(stack[-1], RepositoryCommit):
             stack.append(stack[-1].repo)
         return stack
@@ -192,6 +224,9 @@ class RepositoryCommit(_ClonedRepository):
         return r
 
     def __str__(self):
+        root = self.root
+        if isinstance(root, RemoteGitRepository):
+            return root.format_url()
         return f"{self.root.root_path!s}@{self.rev}"
 
 
@@ -203,38 +238,28 @@ class RemoteGitRepository(_ClonedRepository):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.url!r})"
 
-    def __str__(self):
-        if self.rev:
-            return f"{self.url!s}@{self.rev}"
-        else:
-            return f"{self.url!s}"
-
-
-@dataclass(frozen=True, unsafe_hash=True, init=False)
-class File:
-    relative_path: Path
-    repo: Repository
-
-    def __init__(self, path: Path, repo: Repository):
-        if path.is_absolute():
-            path = path.relative_to(repo.root_path)
-        object.__setattr__(self, "relative_path", path)
-        object.__setattr__(self, "repo", repo)
-
-    @property
-    def path(self) -> Path:
-        with self.repo:
-            return self.repo.root_path / self.relative_path
-
-    def resolve(self) -> Self:
-        with self.repo:
-            if self.path.is_symlink():
-                return File(self.path.readlink(), self.repo)
+    def format_url(self, for_file: File | None = None, for_rev: str | None = None) -> str:
+        if for_rev is None and self.rev:
+            for_rev = self.rev
+        result = urlparse(self.url)
+        if result.netloc == "github.com" and for_rev:
+            path = result.path
+            if path.endswith("/"):
+                path = path[:-1]
+            if for_file is not None:
+                return result._replace(path=f"{path}/blob/{for_rev}/{for_file.relative_path!s}").geturl()
             else:
-                return self
+                return result._replace(path=f"{path}/commit/{for_rev}").geturl()
+        elif for_file is not None:
+            url = self.url
+            if url.endswith("/"):
+                url = url[:-1]
+            if for_rev:
+                url = f"{url}@{for_rev}"
+            return f"{url}/{for_file.relative_path!s}"
+        elif for_rev:
+            return f"{self.url}@{for_rev}"
+        else:
+            return self.url
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.relative_path!r}, {self.repo!r})"
-
-    def __str__(self):
-        return f"{self.repo!s}/{self.relative_path!s}"
+    __str__ = format_url

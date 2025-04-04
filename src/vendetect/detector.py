@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from functools import wraps
 from heapq import heappush, heappop
 from logging import getLogger
-from pathlib import Path
 import types
 from typing import Iterable, Iterator
 

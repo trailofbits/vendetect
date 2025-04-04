@@ -63,7 +63,15 @@ class Repository:
 
     @with_self
     def previous_version(self, path: Path) -> Optional["RepositoryCommit"]:
-        if not self.is_git or GIT_PATH is None:
+        if not self.is_git:
+            log.debug(
+                "Cannot get previous version of %s because %s does not appear to be a git repository",
+                str(path),
+                str(self),
+            )
+            return None
+        if GIT_PATH is None:
+            log.debug("Cannot get previous version of %s because `git` is not installed", str(File(path, self)))
             return None
         if path.is_absolute():
             path = path.relative_to(self.root_path)

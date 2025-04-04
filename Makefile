@@ -66,7 +66,7 @@ reformat:
 
 .PHONY: test tests
 test tests: $(VENV)/pyvenv.cfg
-	uv run pytest --cov=$(PY_IMPORT) $(T) $(TEST_ARGS)
+	uv run pytest --log-level=DEBUG --cov=$(PY_IMPORT) $(T) $(TEST_ARGS)
 	uv run coverage report -m $(COV_ARGS)
 
 .PHONY: doc

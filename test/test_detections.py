@@ -16,8 +16,12 @@ class TestVenDetect(TestCase):
             vend = VenDetector()
             self.assertTrue(
                 any(
-                    d.test.relative_path == Path("src") / "Makefile"
+                    d.test.relative_path == Path("Makefile")
                     and d.source.relative_path == Path("{{cookiecutter.project_slug}}") / "Makefile"
-                    for d in vend.detect(test_repo, source_repo)
+                    for d in vend.detect(test_repo, source_repo, file_filter=lambda f: f.relative_path.name in (
+                        "Makefile",
+                        "LICENSE",
+                        "README.md"
+                    ))
                 )
             )

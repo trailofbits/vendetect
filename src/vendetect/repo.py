@@ -24,16 +24,19 @@ def with_self(func):
 
 
 class Repository:
-    def __init__(self, root_path: Path):
+    def __init__(self, root_path: Path, rev: str | None = None):
         self.root_path: Path = root_path
         self.rev: str = ""
-        with self:
-            if self.is_git:
-                self.rev = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root_path)
-                    .strip()
-                    .decode("utf-8")
-                )
+        if rev is None:
+            with self:
+                if self.is_git:
+                    self.rev = (
+                        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root_path)
+                        .strip()
+                        .decode("utf-8")
+                    )
+        else:
+            self.rev = rev
 
     def __hash__(self) -> int:
         if self.rev:
@@ -143,11 +146,11 @@ class Repository:
 
 
 class _ClonedRepository(Repository):
-    def __init__(self, clone_uri: str):
+    def __init__(self, clone_uri: str, rev: str | None = None):
         self._clone_uri: str = clone_uri
         self._entries: int = 0
         self._tempdir: TemporaryDirectory | None = None
-        super().__init__(Path())
+        super().__init__(Path(), rev=rev)
 
     def __enter__(self) -> Self:
         self._entries += 1
@@ -204,7 +207,7 @@ class RepositoryCommit(_ClonedRepository):
             repo = repo.root
         self.repo: Repository = repo
         self.rev = commit
-        super().__init__(str(repo.root_path))
+        super().__init__(str(repo.root_path), rev=commit)
 
     def _ancestors(self) -> list[Repository]:
         stack: list[Repository] = [self]
@@ -254,7 +257,7 @@ class RepositoryCommit(_ClonedRepository):
 class RemoteGitRepository(_ClonedRepository):
     def __init__(self, url: str):
         self.url: str = url
-        super().__init__(url)
+        super().__init__(url, rev="")
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.url!r})"

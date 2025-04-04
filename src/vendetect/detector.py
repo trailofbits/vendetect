@@ -58,13 +58,9 @@ class Source:
     def __str__(self):
         file_str = str(self.file)
         if file_str.startswith("http"):
-            slices = ";".join(
-                (f"L{s.from_index}-L{s.to_index}" for s in self.source_slices)
-            )
+            slices = ";".join(f"L{s.from_index}-L{s.to_index}" for s in self.source_slices)
             return f"{self.file!s}#{slices}"
-        slices = ";".join(
-            (f"{s.from_index}-{s.to_index}" for s in self.source_slices)
-        )
+        slices = ";".join(f"{s.from_index}-{s.to_index}" for s in self.source_slices)
         return f"{self.file!s}:{slices}"
 
 

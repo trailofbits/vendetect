@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generic, TypeVar, Type, Iterable, Iterator
+from typing import Generic, TypeVar
 
 from numpy import ndarray
 
 C = TypeVar("C")
 F = TypeVar("F")
+
 
 @dataclass(frozen=True, unsafe_hash=True, order=True)
 class Slice:
@@ -25,17 +27,16 @@ class Slice:
     def __getitem__(self, index: int) -> int:
         if index == 0:
             return self.from_index
-        elif index == 1:
+        if index == 1:
             return self.to_index
-        else:
-            raise IndexError(f"Invalid index: {index}")
+        raise IndexError(f"Invalid index: {index}")
 
     def __iter__(self) -> Iterator[int]:
         yield self.from_index
         yield self.to_index
 
     @classmethod
-    def from_ndarray(cls: Type[C], array: ndarray) -> Iterable[C]:
+    def from_ndarray(cls: type[C], array: ndarray) -> Iterable[C]:
         return (cls(from_pos, to_pos) for from_pos, to_pos in zip(*array, strict=False))
 
 

@@ -11,4 +11,10 @@ class CopyDetectComparator(Comparator[CodeFingerprint]):
 
     def compare(self, fp1: CodeFingerprint, fp2: CodeFingerprint) -> Comparison:
         overlap, (sim1, sim2), (slice1, slice2) = compare_files(fp1, fp2)
-        return Comparison(overlap, sim1, sim2, tuple(Slice.from_ndarray(slice1)), tuple(Slice.from_ndarray(slice2)))
+        return Comparison(
+            overlap,
+            sim1,
+            sim2,
+            tuple(Slice.from_ndarray(slice1)),
+            tuple(Slice.from_ndarray(slice2)),
+        )

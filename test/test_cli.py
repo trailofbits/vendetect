@@ -72,8 +72,10 @@ def test_output_format_csv(mock_repositories, capsys):
                 output = fake_out.getvalue()
 
                 # Check if output is in CSV format
-                assert ("Test File,Source File,Test Slice Start,Test Slice End,Source Slice Start,Source Slice End,"
-                        "Similarity") in output
+                assert (
+                    "Test File,Source File,Test Slice Start,Test Slice End,Source Slice Start,Source Slice End,"
+                    "Similarity"
+                ) in output
                 # We're just checking the header format is correct, as our mock doesn't generate actual rows
                 # The real implementation would generate rows for matching content
         except SystemExit:
@@ -123,7 +125,10 @@ def test_output_to_file(mock_repositories, tmp_path):
 
             # Check file content
             file_content = output_file.read_text()
-            assert "Test File,Source File,Test Slice Start,Test Slice End,Source Slice Start,Source Slice End,Similarity" in file_content
+            assert (
+                "Test File,Source File,Test Slice Start,Test Slice End,Source Slice Start,Source Slice End,Similarity"
+                in file_content
+            )
             # We're just checking the header format is correct, as our mock doesn't generate actual rows
         except SystemExit:
             pass  # Main might exit, which is fine

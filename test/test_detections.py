@@ -18,10 +18,11 @@ class TestVenDetect(TestCase):
                 any(
                     d.test.relative_path == Path("Makefile")
                     and d.source.relative_path == Path("{{cookiecutter.project_slug}}") / "Makefile"
-                    for d in vend.detect(test_repo, source_repo, file_filter=lambda f: f.relative_path.name in (
-                        "Makefile",
-                        "LICENSE",
-                        "README.md"
-                    ))
+                    for d in vend.detect(
+                        test_repo,
+                        source_repo,
+                        file_filter=lambda f: f.relative_path.name
+                        in ("Makefile", "LICENSE", "README.md"),
+                    )
                 )
             )

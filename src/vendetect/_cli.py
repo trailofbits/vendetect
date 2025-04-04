@@ -61,8 +61,17 @@ def output_csv(detections: Iterable[Detection], output_file=None):
     output = output_file if output_file else sys.stdout
     csv_writer = csv.writer(output)
     # Write header
-    csv_writer.writerow(["Test File", "Source File", "Test Slice Start", "Test Slice End", "Source Slice Start",
-                         "Source Slice End", "Similarity"])
+    csv_writer.writerow(
+        [
+            "Test File",
+            "Source File",
+            "Test Slice Start",
+            "Test Slice End",
+            "Source Slice Start",
+            "Source Slice End",
+            "Similarity",
+        ]
+    )
 
     for d in detections:
         # Calculate overall similarity (average of both similarities)
@@ -109,8 +118,9 @@ def output_json(detections: Iterable[Detection], output_file=None):
 
         # Prepare slices data
         slices_data = []
-        for (test_slice_start, test_slice_end), (source_slice_start, source_slice_end) in \
-                zip(test_slices, source_slices, strict=False):
+        for (test_slice_start, test_slice_end), (source_slice_start, source_slice_end) in zip(
+            test_slices, source_slices, strict=False
+        ):
             slices_data.append(
                 {
                     "test_slice": {"start": test_slice_start, "end": test_slice_end},
@@ -345,10 +355,18 @@ def main() -> None:
 
                 def file_filter(file: File) -> bool:
                     suffix = file.relative_path.suffix
-                    if suffix in args.file_types or suffix.startswith(".") and suffix[1:] in args.file_types:
+                    if (
+                        suffix in args.file_types
+                        or suffix.startswith(".")
+                        and suffix[1:] in args.file_types
+                    ):
                         return True
                     suffixes = "".join(file.relative_path.suffixes)
-                    if suffixes in args.file_types or suffixes.startswith(".") and suffixes[1:] in args.file_types:
+                    if (
+                        suffixes in args.file_types
+                        or suffixes.startswith(".")
+                        and suffixes[1:] in args.file_types
+                    ):
                         return True
                     return False
 

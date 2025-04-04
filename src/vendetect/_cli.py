@@ -2,6 +2,7 @@ import argparse
 import csv
 import json
 import logging
+import os
 import sys
 from typing import Iterable, Dict, List, Any
 
@@ -51,8 +52,9 @@ class RichStatus(Status):
                                  description=f":magnifying_glass_tilted_right: {file.relative_path.name!s}")
 
 
-def output_csv(detections):
-    csv_writer = csv.writer(sys.stdout)
+def output_csv(detections, output_file=None):
+    output = output_file if output_file else sys.stdout
+    csv_writer = csv.writer(output)
     # Write header
     csv_writer.writerow(["Test File", "Source File", "Slice Start", "Slice End", "Similarity"])
 
@@ -79,8 +81,9 @@ def output_csv(detections):
             ])
 
 
-def output_json(detections):
+def output_json(detections, output_file=None):
     results = []
+    output = output_file if output_file else sys.stdout
 
     for d in detections:
         # Calculate overall similarity (average of both similarities)
@@ -120,10 +123,16 @@ def output_json(detections):
         results.append(detection_data)
 
     # Output JSON
-    json.dump(results, sys.stdout, indent=2)
+    json.dump(results, output, indent=2)
 
 
-def output_rich(detections, console):
+def output_rich(detections, console, output_file=None):
+    # If an output file is specified, create a new Console for it
+    if output_file:
+        file_console = Console(file=output_file)
+    else:
+        file_console = console
+
     for d in detections:
         # Create a table for the detection results
         table = Table(title=f"Vendoring Detection", expand=True)
@@ -213,18 +222,18 @@ def output_rich(detections, console):
                     padding=(1, 1),
                 )
 
-                console.print()
-                console.print(context_panel)
-                console.print()
+                file_console.print()
+                file_console.print(context_panel)
+                file_console.print()
             else:
                 # Just print the table if there are no specific slices
-                console.print(table)
-                console.print()
+                file_console.print(table)
+                file_console.print()
         except Exception as e:
             # Fallback to basic output if there's an error reading or processing files
-            console.print(table)
-            console.print(f"[red]Error displaying code: {e}[/red]")
-            console.print()
+            file_console.print(table)
+            file_console.print(f"[red]Error displaying code: {e}[/red]")
+            file_console.print()
 
 
 def main() -> None:
@@ -238,6 +247,16 @@ def main() -> None:
         choices=["rich", "csv", "json"], 
         default="rich",
         help="output format (default: rich)"
+    )
+    parser.add_argument(
+        "--output", 
+        type=str, 
+        help="output file path (default: stdout)"
+    )
+    parser.add_argument(
+        "--force", 
+        action="store_true", 
+        help="force overwrite of existing output file"
     )
 
     log_section = parser.add_argument_group(title="logging")
@@ -264,6 +283,18 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Check for output file existence if --force is not specified
+    output_file = None
+    if args.output:
+        if not args.force and os.path.exists(args.output):
+            sys.stderr.write(f"Error: Output file {args.output} already exists. Use --force to overwrite.\n")
+            sys.exit(1)
+        try:
+            output_file = open(args.output, 'w')
+        except IOError as e:
+            sys.stderr.write(f"Error: Could not open output file {args.output} for writing: {e}\n")
+            sys.exit(1)
+
     if args.debug:
         numeric_log_level = logging.DEBUG
     elif args.quiet:
@@ -288,17 +319,22 @@ def main() -> None:
 
     traceback.install(show_locals=True)
 
-    with Repository.load(args.TEST_REPO) as test_repo, Repository.load(args.SOURCE_REPO) as source_repo, \
-            RichStatus(Console()) as status:
-        vend = VenDetector(status=status)
-        
-        # Get detections
-        detections = list(vend.detect(test_repo, source_repo))
-        
-        # Output based on format
-        if args.format == "csv":
-            output_csv(detections)
-        elif args.format == "json":
-            output_json(detections)
-        else:  # rich format
-            output_rich(detections, console)
+    try:
+        with Repository.load(args.TEST_REPO) as test_repo, Repository.load(args.SOURCE_REPO) as source_repo, \
+                RichStatus(Console()) as status:
+            vend = VenDetector(status=status)
+            
+            # Get detections
+            detections = list(vend.detect(test_repo, source_repo))
+            
+            # Output based on format
+            if args.format == "csv":
+                output_csv(detections, output_file)
+            elif args.format == "json":
+                output_json(detections, output_file)
+            else:  # rich format
+                output_rich(detections, console, output_file)
+    finally:
+        # Close the output file if it was opened
+        if output_file and output_file != sys.stdout:
+            output_file.close()

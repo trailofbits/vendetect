@@ -1,0 +1,71 @@
+on:
+  release:
+    types:
+      - published
+
+name: release
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: pyproject.toml
+
+    - name: Build distributions
+      run: uv build
+
+    - name: Upload distributions
+      uses: actions/upload-artifact@v4
+      with:
+        name: distributions
+        path: dist/
+
+  generate-provenance:
+    name: Generate SLSA provenance for distributions
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      id-token: write # To sign the provenance.
+      attestations: write # To persist the attestation files.
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+      - name: Generate build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/*'
+
+  publish:
+    name: Publish Python distributions to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/vendetect
+    needs: [build, generate-provenance]
+    permissions:
+      # Used to sign the release's artifacts with sigstore-python.
+      # Used to publish to PyPI with Trusted Publishing.
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true

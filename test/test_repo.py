@@ -24,7 +24,7 @@ class TestRepo(TestCase):
                 "README.md"
             ):
                 self.assertTrue(any(
-                    p.name == expected
+                    p.relative_path.name == expected
                     for p in files
                 ), f"Missing expected file: {expected}")
         finally:

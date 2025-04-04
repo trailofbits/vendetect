@@ -46,10 +46,16 @@ class Source:
 
     def __hash__(self) -> int:
         return hash((self.file, self.source_slices.tobytes()))
+        
+    def __eq__(self, other):
+        if not isinstance(other, Source):
+            return False
+        return (self.file == other.file and
+                (self.source_slices == other.source_slices).all())
 
     def __lt__(self, other: "Source"):
         return self.file.relative_path < other.file.relative_path or (
-                self.file == other.file and self.source_slices < other.source_slices
+                self.file == other.file and (self.source_slices < other.source_slices).all()
         )
 
     def __repr__(self):
@@ -234,6 +240,7 @@ class VenDetector:
 
     def find_probable_copy(self, detection: Detection) -> Detection:
         """Finds the most probable point in the test repo and source repo when the given detection was vendored"""
+        log.info(f"Finding the most probable commit in which {detection.test_source!s} was copied…")
         best: Detection = detection
         to_test: list[tuple[Repository, Repository]] = [(detection.test_repo, detection.source_repo)]
         history: set[tuple[Repository | None, Repository | None]] = set()

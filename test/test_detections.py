@@ -10,5 +10,8 @@ class TestVenDetect(TestCase):
         with Repository(Path(__file__).parent.parent) as test_repo, \
                 RemoteGitRepository("https://github.com/trailofbits/cookiecutter-python") as source_repo:
             vend = VenDetector()
-            for d in vend.detect(test_repo, source_repo):
-                print(f"{d.test_repo!s}/{d.test_file!s} <-- {d.source_repo!s}/{d.source_file!s}")
+            self.assertTrue(any(
+                d.test.relative_path == Path("src") / "Makefile" and
+                d.source.relative_path == Path("{{cookiecutter.project_slug}}") / "Makefile"
+                for d in vend.detect(test_repo, source_repo)
+            ))

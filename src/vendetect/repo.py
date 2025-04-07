@@ -79,6 +79,12 @@ class Repository:
         if GIT_PATH is None:
             log.warning("Cannot get previous version of %s because `git` is not installed", str(File(path, self)))
             return None
+        if self.is_shallow_clone:
+            msg = (
+                f"{self!s} appears to be a shallow clone; please fetch the entire git history, e.g., "
+                f"with `git fetch --unshallow` or by cloning the entire repository"
+            )
+            raise RepositoryError(msg)
         if path.is_absolute():
             path = path.relative_to(self.root_path)
         prev_version = (
@@ -105,6 +111,22 @@ class Repository:
         if prev_version:
             return RepositoryCommit(self, prev_version)
         return None
+
+    @property
+    @with_self
+    def is_shallow_clone(self) -> bool:
+        """Test whether the root repository is a shallow cone."""
+        try:
+            return (
+                subprocess.check_output(  # noqa: S603
+                    [GIT_PATH, "rev-parse", "--is-shallow-repository"],
+                    cwd=self.root_path,
+                    stderr=subprocess.DEVNULL,  # type: ignore
+                ).strip()
+                != b"false"
+            )
+        except subprocess.CalledProcessError:
+            return False
 
     @property
     @with_self
@@ -239,17 +261,6 @@ class RepositoryCommit(_ClonedRepository):
             stack.append(stack[-1].repo)
         return stack
 
-    def is_root_shallow(self) -> bool:
-        """Test whether the root repository is a shallow cone."""
-        return (
-            subprocess.check_output(  # noqa: S603
-                [GIT_PATH, "rev-parse", "--is-shallow-repository"],
-                cwd=self.root_path,
-                stderr=subprocess.DEVNULL,  # type: ignore
-            ).strip()
-            != b"false"
-        )
-
     def commit_exists(self, rev: str | None = None) -> bool:
         if rev is None:
             rev = self.rev
@@ -270,7 +281,7 @@ class RepositoryCommit(_ClonedRepository):
         if self._entries == 1:
             if not self.commit_exists():
                 # is the source repo a shallow cone?
-                if self.is_root_shallow():
+                if self.is_shallow_clone:
                     msg = (
                         f"{self.root!s} appears to be a shallow clone; please fetch the entire git history, e.g., "
                         f"with `git fetch --unshallow` or by cloning the entire repository"

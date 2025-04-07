@@ -77,7 +77,7 @@ class Repository:
             )
             return None
         if GIT_PATH is None:
-            log.debug("Cannot get previous version of %s because `git` is not installed", str(File(path, self)))
+            log.warning("Cannot get previous version of %s because `git` is not installed", str(File(path, self)))
             return None
         if path.is_absolute():
             path = path.relative_to(self.root_path)

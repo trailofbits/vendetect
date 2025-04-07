@@ -9,12 +9,18 @@ from tempfile import TemporaryDirectory
 from typing import Optional, ParamSpec, Self, TypeVar
 from urllib.parse import urlparse
 
+from .errors import VendetectRuntimeError
+
 GIT_PATH: str | None = shutil.which("git")
 
 log = getLogger(__name__)
 
 T = TypeVar("T")
 P = ParamSpec("P")
+
+
+class RepositoryError(VendetectRuntimeError):
+    pass
 
 
 def with_self(func: Callable[P, T]) -> Callable[P, T]:
@@ -109,7 +115,7 @@ class Repository:
     def git_files(self) -> Iterator["File"]:
         if GIT_PATH is None:
             msg = "`git` binary could not be found"
-            raise RuntimeError(msg)
+            raise RepositoryError(msg)
         for line in subprocess.check_output([GIT_PATH, "ls-files"], cwd=self.root_path).splitlines():  # noqa: S603
             line = line.strip()  # noqa: PLW2901
             if line:
@@ -158,6 +164,12 @@ class _ClonedRepository(Repository):
         self._clone_uri: str = clone_uri
         self._entries: int = 0
         self._tempdir: TemporaryDirectory | None = None
+        if GIT_PATH is None:
+            msg = (
+                f"Error cloning {self._clone_uri}: `git` binary could not be found;"
+                f"please make sure it is in your PATH"
+            )
+            raise RepositoryError(msg)
         super().__init__(Path(), rev=rev)
 
     def __enter__(self) -> Self:
@@ -165,11 +177,15 @@ class _ClonedRepository(Repository):
         if self._entries == 1:
             self._tempdir = TemporaryDirectory()
             self.root_path = Path(self._tempdir.__enter__())
-            subprocess.check_call(  # noqa: S603
-                [GIT_PATH, "clone", str(self._clone_uri), "."],  # type: ignore
-                cwd=self.root_path,
-                stderr=subprocess.DEVNULL,
-            )
+            try:
+                subprocess.check_call(  # noqa: S603
+                    [GIT_PATH, "clone", str(self._clone_uri), "."],  # type: ignore
+                    cwd=self.root_path,
+                    stderr=subprocess.DEVNULL,
+                )
+            except subprocess.CalledProcessError as e:
+                msg = f"Failed to clone `{self._clone_uri}`: {e!s}"
+                raise RepositoryError(msg) from None
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
@@ -223,9 +239,45 @@ class RepositoryCommit(_ClonedRepository):
             stack.append(stack[-1].repo)
         return stack
 
+    def is_root_shallow(self) -> bool:
+        """Test whether the root repository is a shallow cone."""
+        return (
+            subprocess.check_output(  # noqa: S603
+                [GIT_PATH, "rev-parse", "--is-shallow-repository"],
+                cwd=self.root_path,
+                stderr=subprocess.DEVNULL,  # type: ignore
+            ).strip()
+            != b"false"
+        )
+
+    def commit_exists(self, rev: str | None = None) -> bool:
+        if rev is None:
+            rev = self.rev
+        try:
+            return (
+                subprocess.check_output(  # noqa: S603
+                    [GIT_PATH, "cat-file", "-t", rev],
+                    cwd=self.root_path,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+                == b"commit"
+            )
+        except subprocess.CalledProcessError:
+            return False
+
     def _enter(self) -> Self:
         ret = super().__enter__()
         if self._entries == 1:
+            if not self.commit_exists():
+                # is the source repo a shallow cone?
+                if self.is_root_shallow():
+                    msg = (
+                        f"{self.root!s} appears to be a shallow clone; please fetch the entire git history, e.g., "
+                        f"with `git fetch --unshallow` or by cloning the entire repository"
+                    )
+                else:
+                    msg = f"{self.root!s} does not have commit {self.rev} fetched"
+                raise RepositoryError(msg)
             subprocess.check_call(  # noqa: S603
                 [GIT_PATH, "checkout", self.rev],
                 cwd=self.root_path,

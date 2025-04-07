@@ -18,6 +18,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .detector import Detection, Status, VenDetector, get_lexer_for_filename
+from .errors import VendetectError
 from .repo import File, Repository
 
 logger = logging.getLogger(__name__)
@@ -366,6 +367,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 output_json(detections, args.min_similarity, output_file)
             else:  # rich format
                 output_rich(detections, console, args.min_similarity, output_file)
+    except VendetectError as e:
+        logger.error(str(e))  # noqa: TRY400
     finally:
         # Close the output file if it was opened
         if output_file and output_file != sys.stdout:

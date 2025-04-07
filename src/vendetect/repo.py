@@ -39,8 +39,9 @@ class Repository:
         if rev is None:
             with self:
                 if self.is_git:
+                    git_path: str = GIT_PATH  # type: ignore
                     self.rev = (
-                        subprocess.check_output([GIT_PATH, "rev-parse", "HEAD"], cwd=self.root_path)  # noqa: S603
+                        subprocess.check_output([git_path, "rev-parse", "HEAD"], cwd=self.root_path)  #  noqa: S603
                         .strip()
                         .decode("utf-8")
                     )
@@ -119,9 +120,9 @@ class Repository:
         try:
             return (
                 subprocess.check_output(  # noqa: S603
-                    [GIT_PATH, "rev-parse", "--is-shallow-repository"],
+                    [GIT_PATH, "rev-parse", "--is-shallow-repository"],  # type: ignore
                     cwd=self.root_path,
-                    stderr=subprocess.DEVNULL,  # type: ignore
+                    stderr=subprocess.DEVNULL,
                 ).strip()
                 != b"false"
             )
@@ -267,7 +268,7 @@ class RepositoryCommit(_ClonedRepository):
         try:
             return (
                 subprocess.check_output(  # noqa: S603
-                    [GIT_PATH, "cat-file", "-t", rev],
+                    [GIT_PATH, "cat-file", "-t", rev],  # type: ignore
                     cwd=self.root_path,
                     stderr=subprocess.DEVNULL,
                 ).strip()
@@ -290,9 +291,9 @@ class RepositoryCommit(_ClonedRepository):
                     msg = f"{self.root!s} does not have commit {self.rev} fetched"
                 raise RepositoryError(msg)
             subprocess.check_call(  # noqa: S603
-                [GIT_PATH, "checkout", self.rev],
+                [GIT_PATH, "checkout", self.rev],  # type: ignore
                 cwd=self.root_path,
-                stderr=subprocess.DEVNULL,  # type: ignore
+                stderr=subprocess.DEVNULL,
             )
         return ret
 
@@ -351,7 +352,8 @@ class RemoteGitRepository(_ClonedRepository):
                 for_rev = self.rev
             elif for_file:
                 # get the latest commit from the remote repo
-                raw_head = subprocess.check_output([GIT_PATH, "ls-remote", self.url, "HEAD"])  # noqa: S603
+                git_path: str = GIT_PATH  # type: ignore
+                raw_head = subprocess.check_output([git_path, "ls-remote", self.url, "HEAD"])  # noqa: S603
                 for_rev = raw_head.split()[0].decode("utf-8")
         result = urlparse(self.url)
         if result.netloc == "github.com" and for_rev:

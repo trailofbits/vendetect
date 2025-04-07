@@ -101,9 +101,9 @@ class VenDetector:
             self.status = status
 
     @staticmethod
-    def callback(func):  # noqa: ANN205; type: ignore
+    def callback(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(self: "VenDetector", *args, **kwargs):  # noqa: ANN202, ANN002, ANN003; type: ignore
+        def wrapper(self: "VenDetector", *args: tuple, **kwargs: dict) -> Iterator | object:
             if not hasattr(self.status, f"on_{func.__name__}"):
                 msg = (
                     f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required "
@@ -121,7 +121,7 @@ class VenDetector:
             if hasattr(self.status, f"{func.__name__}_completed"):
                 getattr(self.status, f"{func.__name__}_completed")(*modified_args, **kwargs)
             if not is_generator:
-                return ret
+                return ret  # type: ignore
 
         return wrapper
 

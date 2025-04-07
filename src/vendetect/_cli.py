@@ -347,7 +347,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             # Get detections
             if not args.file_types:
 
-                def file_filter(_: File) -> bool:
+                def file_filter(file: File) -> bool:  # noqa: ARG001
                     return True
             else:
 

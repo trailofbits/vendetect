@@ -283,7 +283,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         default=0.5,
         help="the minimum similarity threshold to output a match (range: 0.0-1.0, default: 0.5)",
     )
-    
+
     # Performance optimization options
     perf_section = parser.add_argument_group(title="performance optimizations")
     perf_section.add_argument(
@@ -367,7 +367,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 status=status,
                 incremental=args.incremental,
                 batch_size=args.batch_size,
-                max_history_depth=args.max_history_depth
+                max_history_depth=args.max_history_depth,
             )
 
             # Get detections
@@ -379,16 +379,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
                 def file_filter(file: File) -> bool:
                     suffix = file.relative_path.suffix
-                    if suffix in args.file_types or suffix.startswith(".") and suffix[1:] in args.file_types:
+                    if suffix in args.file_types or (suffix.startswith(".") and suffix[1:] in args.file_types):
                         return True
                     suffixes = "".join(file.relative_path.suffixes)
-                    return suffixes in args.file_types or suffixes.startswith(".") and suffixes[1:] in args.file_types
+                    return suffixes in args.file_types or (suffixes.startswith(".") and suffixes[1:] in args.file_types)
 
             detections = vend.detect(
-                test_repo, 
-                source_repo, 
-                file_filter=file_filter,
-                max_history_depth=args.max_history_depth
+                test_repo, source_repo, file_filter=file_filter, max_history_depth=args.max_history_depth
             )
 
             # Output based on format

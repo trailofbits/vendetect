@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Generic, Self, TypeVar
 
 from numpy import ndarray
 
@@ -37,7 +37,7 @@ class Slice:
         yield self.to_index
 
     @classmethod
-    def from_ndarray(cls: type[C], array: ndarray) -> Iterable[C]:
+    def from_ndarray(cls, array: ndarray) -> Iterable[Self]:
         return (cls(from_pos, to_pos) for from_pos, to_pos in zip(*array, strict=False))
 
 

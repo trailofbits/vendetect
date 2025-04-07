@@ -283,6 +283,26 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         default=0.5,
         help="the minimum similarity threshold to output a match (range: 0.0-1.0, default: 0.5)",
     )
+    
+    # Performance optimization options
+    perf_section = parser.add_argument_group(title="performance optimizations")
+    perf_section.add_argument(
+        "--incremental",
+        action="store_true",
+        help="enable incremental result reporting (processes and outputs files in batches)",
+    )
+    perf_section.add_argument(
+        "--batch-size",
+        type=int,
+        default=100,
+        help="number of files to process in each batch when using incremental mode (default: 100)",
+    )
+    perf_section.add_argument(
+        "--max-history-depth",
+        type=int,
+        default=-1,
+        help="maximum depth to traverse in commit history (default: -1, -1 = entire history, 0 = no history traversal)",
+    )
 
     log_section = parser.add_argument_group(title="logging")
     log_group = log_section.add_mutually_exclusive_group()
@@ -342,7 +362,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             Repository.load(args.SOURCE_REPO) as source_repo,
             RichStatus(Console()) as status,
         ):
-            vend = VenDetector(status=status)
+            # Initialize detector with optimization options
+            vend = VenDetector(
+                status=status,
+                incremental=args.incremental,
+                batch_size=args.batch_size,
+                max_history_depth=args.max_history_depth
+            )
 
             # Get detections
             if not args.file_types:
@@ -358,7 +384,12 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                     suffixes = "".join(file.relative_path.suffixes)
                     return suffixes in args.file_types or suffixes.startswith(".") and suffixes[1:] in args.file_types
 
-            detections = vend.detect(test_repo, source_repo, file_filter=file_filter)
+            detections = vend.detect(
+                test_repo, 
+                source_repo, 
+                file_filter=file_filter,
+                max_history_depth=args.max_history_depth
+            )
 
             # Output based on format
             if args.format == "csv":

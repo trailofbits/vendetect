@@ -91,7 +91,8 @@ class Detection:
 
 
 class VenDetector:
-    def __init__(self, comparator: Comparator | None = None, status: Status | None = None):
+    def __init__(self, comparator: Comparator | None = None, status: Status | None = None, 
+                 incremental: bool = False, batch_size: int = 100, max_history_depth: int | None = None):
         if comparator is None:
             comparator = CopyDetectComparator()
         self.comparator: Comparator = comparator
@@ -99,6 +100,10 @@ class VenDetector:
             self.status: Status = Status()
         else:
             self.status = status
+        self.incremental = incremental
+        self.batch_size = batch_size  # Process files in batches
+        self.max_history_depth = max_history_depth if max_history_depth is not None and max_history_depth >= 0 else None  # Limit history traversal depth
+        self._fingerprint_cache = {}  # Cache fingerprints
 
     @staticmethod
     def callback(func: Callable) -> Callable:
@@ -125,12 +130,26 @@ class VenDetector:
 
         return wrapper
 
+    def _get_fingerprint(self, file_path: Path) -> tuple[object, bool]:
+        """Get fingerprint from cache or compute it, returning tuple of (fingerprint, is_cached)"""
+        path_str = str(file_path)
+        if path_str in self._fingerprint_cache:
+            return self._fingerprint_cache[path_str], True
+        
+        try:
+            fp = self.comparator.fingerprint(file_path)
+            self._fingerprint_cache[path_str] = fp
+            return fp, False
+        except Exception as e:
+            log.warning("Error fingerprinting %s: %s", str(file_path), str(e))
+            return None, False
+
     @callback
     def compare(  # noqa: C901
         self, test_files: Iterable[File], source_files: Iterable[File]
     ) -> Iterator[Detection]:
-        test_files: Iterable[File] = tuple(test_files)
-        source_files: Iterable[File] = tuple(source_files)
+        test_files: list[File] = list(test_files)
+        source_files: list[File] = list(source_files)
 
         with ExitStack() as stack:
             for repo in {f.repo for f in test_files} | {f.repo for f in source_files}:
@@ -139,6 +158,7 @@ class VenDetector:
             tf: list[File] = []
             sf: list[File] = []
 
+            # Apply file filtering based on lexer availability
             for lst, files in ((tf, test_files), (sf, source_files)):
                 for file in files:
                     if get_lexer_for_filename(file.path.name) is None:
@@ -157,61 +177,95 @@ class VenDetector:
             explored_sources: set[Source] = set()
             detections: list[Detection] = []
 
-            for test_file in test_files:
-                self.status.update_compare_progress(test_file)
+            # Process files in batches to allow incremental result reporting
+            for i in range(0, len(test_files), self.batch_size):
+                batch_test_files = test_files[i:i+self.batch_size]
+                
+                for test_file in batch_test_files:
+                    self.status.update_compare_progress(test_file)
 
-                try:
-                    fp1 = self.comparator.fingerprint(test_file.path)
-                except Exception as e:  # noqa: BLE001
-                    log.warning("Error fingerprinting %s: %s", str(test_file), str(e))
-                    continue
-
-                for source_file in source_files:
-                    self.status.update_compare_progress()
-
-                    try:
-                        fp2 = self.comparator.fingerprint(source_file.path)
-                    except Exception as e:  # noqa: BLE001
-                        log.warning("Error fingerprinting %s: %s", str(source_file), str(e))
+                    fp1, _ = self._get_fingerprint(test_file.path)
+                    if fp1 is None:
                         continue
-                    cmp = self.comparator.compare(fp1, fp2)
-                    d = Detection(test_file, source_file, cmp)
-                    heappush(detections, d)
 
-        while detections:
-            d = heappop(detections)
+                    for source_file in source_files:
+                        self.status.update_compare_progress()
 
-            if d.test_source in explored_sources:
-                # we already found a different provenance for this source slice with a better similarity
-                continue
+                        fp2, _ = self._get_fingerprint(source_file.path)
+                        if fp2 is None:
+                            continue
+                            
+                        cmp = self.comparator.compare(fp1, fp2)
+                        d = Detection(test_file, source_file, cmp)
+                        heappush(detections, d)
 
-            yield d
+                # Process accumulated detections for this batch
+                if self.incremental and detections:
+                    # Process detections incrementally
+                    processed_batch = []
+                    while detections:
+                        d = heappop(detections)
+                        if d.test_source in explored_sources:
+                            # Skip if already found with better similarity
+                            continue
+                        
+                        processed_batch.append(d)
+                        explored_sources.add(d.test_source)
+                    
+                    # Yield all detections from this batch
+                    for d in processed_batch:
+                        yield d
 
-            explored_sources.add(d.test_source)
+            # Process remaining detections if not in incremental mode
+            if not self.incremental:
+                while detections:
+                    d = heappop(detections)
+                    if d.test_source in explored_sources:
+                        continue
+                    yield d
+                    explored_sources.add(d.test_source)
 
-    def find_probable_copy(self, detection: Detection) -> Detection:
-        """Find the most probable point in the test repo and source repo when the given detection was vendored."""
-        log.info("Finding the most probable commit in which %s was copied…", str(detection.test_source))
+    def find_probable_copy(self, detection: Detection, max_depth: int | None = None) -> Detection:
+        """Find the most probable point in the test repo and source repo when the given detection was vendored.
+        
+        Args:
+            detection: The detection to find the probable copy for
+            max_depth: Maximum depth to traverse in history (None uses class default)
+        """
+        max_depth = max_depth if max_depth is not None and max_depth >= 0 else self.max_history_depth
+        log.info("Finding the most probable commit in which %s was copied… (max depth: %d)", 
+                 str(detection.test_source), max_depth)
+        
         best: Detection = detection
-        to_test: list[tuple[Repository, Repository]] = [(detection.test_repo, detection.source_repo)]
+        to_test: list[tuple[Repository, Repository, int]] = [(detection.test_repo, detection.source_repo, 0)]
         history: set[tuple[Repository | None, Repository | None]] = set()
+        
         while to_test:
-            test_repo, source_repo = to_test.pop()
+            test_repo, source_repo, depth = to_test.pop()
+            
+            # Stop if we've reached max depth
+            if depth >= max_depth:
+                continue
+                
             if history:
                 new_detections = tuple(self.compare((detection.test,), (detection.source,)))
                 if new_detections:
                     best = min(best, *new_detections)
+                    
             pv = test_repo.previous_version(detection.test.relative_path)
             spv = source_repo.previous_version(detection.source.relative_path)
+            
             if (pv, spv) in history:
                 continue
+                
             history.add((pv, spv))
             if pv is not None and spv is not None:
-                to_test.append((pv, spv))
+                to_test.append((pv, spv, depth + 1))
             if pv is not None:
-                to_test.append((pv, source_repo))
+                to_test.append((pv, source_repo, depth + 1))
             if spv is not None:
-                to_test.append((spv, source_repo))
+                to_test.append((test_repo, spv, depth + 1))
+                
         return best
 
     def detect(
@@ -219,9 +273,26 @@ class VenDetector:
         test_repo: Repository,
         source_repo: Repository,
         file_filter: Callable[[File], bool] = lambda _: True,
+        max_history_depth: int | None = None,
     ) -> Iterator[Detection]:
-        for d in self.compare(
-            (f for f in test_repo.files() if file_filter(f)),
-            (f for f in source_repo.files() if file_filter(f)),
-        ):
-            yield self.find_probable_copy(d)
+        """Detect vendored code between repositories.
+        
+        Args:
+            test_repo: Repository to test
+            source_repo: Repository to check for vendored code
+            file_filter: Function to filter files
+            max_history_depth: Maximum depth to traverse in history
+        
+        Returns:
+            Iterator of Detection objects
+        """
+        test_files = list(f for f in test_repo.files() if file_filter(f))
+        source_files = list(f for f in source_repo.files() if file_filter(f))
+        
+        log.info(f"Analyzing {len(test_files)} test files against {len(source_files)} source files")
+        
+        # Get detections by comparing files
+        for d in self.compare(test_files, source_files):
+            # Find probable copy with potentially limited history depth
+            probable = self.find_probable_copy(d, max_depth=max_history_depth)
+            yield probable

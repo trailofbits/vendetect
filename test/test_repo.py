@@ -29,6 +29,8 @@ class TestRepo(TestCase):
     def test_prev_version(self):  # noqa: ANN201
         repo: Repository | None = Repository(REPO_ROOT)
         with repo:
+            if repo.is_shallow_clone:
+                pytest.skip("shallow clones are not supported")
             prev: Repository | None = None
             while repo:
                 repo = repo.previous_version(Path("./pyproject.toml"))

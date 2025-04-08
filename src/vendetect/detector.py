@@ -61,13 +61,25 @@ class Source:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.file!r}, {self.source_slices!r})"
 
-    def __str__(self) -> str:
+    def to_str(self, max_slices: int = -1) -> str:
         file_str = str(self.file)
+        if max_slices == 0:
+            if self.source_slices:
+                return f"{file_str}:…"
+            return file_str
+        slices = self.source_slices if max_slices < 0 else self.source_slices[:max_slices]
         if file_str.startswith("http"):
-            slices = ";".join(f"L{s.from_index}-L{s.to_index}" for s in self.source_slices)
-            return f"{self.file!s}#{slices}"
-        slices = ";".join(f"{s.from_index}-{s.to_index}" for s in self.source_slices)
-        return f"{self.file!s}:{slices}"
+            slices_str = ";".join(f"L{s.from_index}-L{s.to_index}" for s in slices)
+            slices_str = f"#{slices_str}"
+        else:
+            slices_str = ";".join(f"{s.from_index}-{s.to_index}" for s in slices)
+            slices_str = f":{slices_str}"
+        if len(slices) < len(self.source_slices):
+            slices_str = f"{slices_str};…"
+        return f"{file_str}{slices_str}"
+
+    def __str__(self) -> str:
+        return self.to_str(max_slices=3)
 
 
 @dataclass(frozen=True, unsafe_hash=True)
@@ -308,6 +320,12 @@ class VenDetector:
 
         # Get detections by comparing files
         for d in self.compare(test_files, source_files):
+            log.info(
+                "Found a %d token overlap between %s and %s",
+                d.comparison.token_overlap,
+                d.test.relative_path,
+                d.source.relative_path,
+            )
             # Find probable copy with potentially limited history depth
             probable = self.find_probable_copy(d, max_depth=max_history_depth)
             yield probable

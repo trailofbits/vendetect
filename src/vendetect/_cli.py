@@ -359,6 +359,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 output_rich(detections, console, args.min_similarity, output_file)
     except VendetectError as e:
         logger.error(str(e))  # noqa: TRY400
+    except KeyboardInterrupt:
+        sys.exit(127)
     finally:
         # Close the output file if it was opened
         if output_file and output_file != sys.stdout:

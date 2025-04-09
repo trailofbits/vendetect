@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from rich import traceback
-from rich.columns import Columns
-from rich.console import Console, Group
+from rich.console import Console
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
@@ -186,8 +185,10 @@ def output_rich(
             test_slices = d.comparison.slices1
             source_slices = d.comparison.slices2
 
-            test_slice_panels: list[Text | Syntax] = []
-            source_slice_panels: list[Text | Syntax] = []
+            match_table = Table()
+            match_table.add_column(f"{d.test.relative_path.name!s}", style="cyan")
+            match_table.add_column(f"{d.source.relative_path.name!s}", style="green")
+            first = True
 
             for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
                 # Extract the content for the detected slices
@@ -215,27 +216,16 @@ def output_rich(
                     highlight_lines=set(range(max(1, source_start), source_end + 1)),
                 )
 
-                if test_slice_panels:
-                    test_slice_panels.append(Text("  ⋮", style="dim"))
-                    source_slice_panels.append(Text("  ⋮", style="dim"))
-                test_slice_panels.append(test_syntax)
-                source_slice_panels.append(source_syntax)
+                if first:
+                    first = False
+                else:
+                    match_table.add_row(Text("  ⋮", style="dim"), Text("  ⋮", style="dim"))
 
-            if test_slice_panels or source_slice_panels:
-                # Create side-by-side panels
-                test_panel = Panel(
-                    Group(*test_slice_panels),
-                    title=f"{d.test.relative_path.name!s}",
-                    border_style="cyan",
-                )
-                source_panel = Panel(
-                    Group(*source_slice_panels),
-                    title=f"{d.source.relative_path.name!s}",
-                    border_style="green",
-                )
+                match_table.add_row(test_syntax, source_syntax)
 
+            if not first:
                 context_panel = Panel.fit(
-                    Group(table, Columns([test_panel, source_panel])),
+                    match_table,
                     title="Vendored Code",
                     border_style="red",
                     title_align="left",
@@ -360,7 +350,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         with (
             Repository.load(args.TEST_REPO) as test_repo,
             Repository.load(args.SOURCE_REPO) as source_repo,
-            RichStatus(Console()) as status,
+            RichStatus(console) as status,
         ):
             # Initialize detector with optimization options
             vend = VenDetector(
@@ -397,6 +387,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 output_rich(detections, console, args.min_similarity, output_file)
     except VendetectError as e:
         logger.error(str(e))  # noqa: TRY400
+    except KeyboardInterrupt:
+        sys.exit(127)
     finally:
         # Close the output file if it was opened
         if output_file and output_file != sys.stdout:

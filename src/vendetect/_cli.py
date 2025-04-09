@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from rich import traceback
-from rich.columns import Columns
-from rich.console import Console, Group
+from rich.console import Console
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import Progress, TaskID

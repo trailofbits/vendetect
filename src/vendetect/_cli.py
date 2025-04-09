@@ -186,8 +186,10 @@ def output_rich(
             test_slices = d.comparison.slices1
             source_slices = d.comparison.slices2
 
-            test_slice_panels: list[Text | Syntax] = []
-            source_slice_panels: list[Text | Syntax] = []
+            match_table = Table()
+            match_table.add_column(f"{d.test.relative_path.name!s}", style="cyan")
+            match_table.add_column(f"{d.source.relative_path.name!s}", style="green")
+            first = True
 
             for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
                 # Extract the content for the detected slices
@@ -215,27 +217,16 @@ def output_rich(
                     highlight_lines=set(range(max(1, source_start), source_end + 1)),
                 )
 
-                if test_slice_panels:
-                    test_slice_panels.append(Text("  ⋮", style="dim"))
-                    source_slice_panels.append(Text("  ⋮", style="dim"))
-                test_slice_panels.append(test_syntax)
-                source_slice_panels.append(source_syntax)
+                if first:
+                    first = False
+                else:
+                    match_table.add_row(Text("  ⋮", style="dim"), Text("  ⋮", style="dim"))
 
-            if test_slice_panels or source_slice_panels:
-                # Create side-by-side panels
-                test_panel = Panel(
-                    Group(*test_slice_panels),
-                    title=f"{d.test.relative_path.name!s}",
-                    border_style="cyan",
-                )
-                source_panel = Panel(
-                    Group(*source_slice_panels),
-                    title=f"{d.source.relative_path.name!s}",
-                    border_style="green",
-                )
+                match_table.add_row(test_syntax, source_syntax)
 
+            if not first:
                 context_panel = Panel.fit(
-                    Group(table, Columns([test_panel, source_panel])),
+                    match_table,
                     title="Vendored Code",
                     border_style="red",
                     title_align="left",

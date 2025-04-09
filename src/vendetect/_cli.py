@@ -330,7 +330,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         with (
             Repository.load(args.TEST_REPO) as test_repo,
             Repository.load(args.SOURCE_REPO) as source_repo,
-            RichStatus(Console()) as status,
+            RichStatus(console) as status,
         ):
             vend = VenDetector(status=status)
 

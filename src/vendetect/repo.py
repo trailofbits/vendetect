@@ -220,9 +220,11 @@ class Repository:
         return f"{self.root_path!s}"
 
     @classmethod
-    def load(cls, repo_uri: str, subdir: Path | None = None) -> "Repository":
+    def load(cls, repo_uri: str, subdir: Path | str | None = None) -> "Repository":
         # first see if it is a local repo
         repo_uri_path = Path(repo_uri).absolute()
+        if subdir is not None and not isinstance(subdir, Path):
+            subdir = Path(subdir)
         if repo_uri_path.exists() and repo_uri_path.is_dir():
             return Repository(repo_uri_path, subdir=subdir)
         return RemoteGitRepository(repo_uri, subdir=subdir)

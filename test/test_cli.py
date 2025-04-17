@@ -50,7 +50,7 @@ def mock_repositories(tmp_path, monkeypatch):  # noqa: ANN201
 
     # Mock the detect method
 
-    def mock_detect(self, test_repo, source_repo, file_filter=lambda _: True):  # noqa: ANN202, ARG001
+    def mock_detect(self, test_repo, source_repo, file_filter=lambda _: True, max_history_depth=None):  # noqa: ANN202, ARG001
         return [mock_detection]
 
     monkeypatch.setattr(VenDetector, "detect", mock_detect)

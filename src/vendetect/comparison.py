@@ -63,10 +63,14 @@ class Comparison:
     slices2: tuple[Slice, ...]
 
     def __lt__(self, other: "Comparison") -> bool:
-        if self.token_overlap > other.token_overlap:
-            return True
-        if self.token_overlap < other.token_overlap:
-            return False
+        # TODO: Make the comparison metric user-specifiable
+        # For now, disable comparison of token overlap, because that was causing too many false-positives
+        # (I believe due to whitespace overlap)
+        #
+        # if self.token_overlap > other.token_overlap:
+        #     return True
+        # if self.token_overlap < other.token_overlap:
+        #     return False
         oursim = self.similarity1 + self.similarity2
         theirsim = other.similarity1 + other.similarity2
         return oursim > theirsim

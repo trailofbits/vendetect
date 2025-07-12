@@ -27,6 +27,12 @@ Key features:
 pip install vendetect
 ```
 
+### Using [uv](https://docs.astral.sh/uv/guides/tools/)
+
+```bash
+uv tool install vendetect
+```
+
 ### From source
 
 Clone the repository and install:
@@ -34,7 +40,7 @@ Clone the repository and install:
 ```bash
 git clone https://github.com/trailofbits/vendetect.git
 cd vendetect
-pip install .
+uv tool install .
 ```
 
 ### Development installation
@@ -44,7 +50,8 @@ For development with all dependencies:
 ```bash
 git clone https://github.com/trailofbits/vendetect.git
 cd vendetect
-pip install -e ".[dev]"
+uv sync --group dev
+source .venv/bin/activate
 ```
 
 ## Usage 🏃
@@ -123,7 +130,10 @@ Contributions are welcome! Check out the [issues](https://github.com/trailofbits
 
 ```bash
 # Install development dependencies
-pip install -e ".[dev]"
+uv sync --group dev
+
+# Source virtual env
+source .venv/bin/activate
 
 # Run tests
 pytest

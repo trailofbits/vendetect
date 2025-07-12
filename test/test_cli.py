@@ -3,11 +3,12 @@
 import json
 import sys
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from vendetect._cli import main
+from vendetect.detector import VenDetector
 
 
 @pytest.fixture
@@ -24,11 +25,6 @@ def mock_repositories(tmp_path, monkeypatch):  # noqa: ANN201
     source_repo.mkdir()
     source_file = source_repo / "source_file.py"
     source_file.write_text("def hello_world():\n    print('Hello, World!')\n")
-
-    # Mock the detect method to avoid the repository File error
-    from unittest.mock import MagicMock
-
-    from vendetect.detector import VenDetector
 
     # Create mock detection result
     mock_detection = MagicMock()

@@ -343,10 +343,10 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
                 def file_filter(file: File) -> bool:
                     suffix = file.relative_path.suffix
-                    if suffix in args.file_types or suffix.startswith(".") and suffix[1:] in args.file_types:
+                    if suffix in args.file_types or (suffix.startswith(".") and suffix[1:] in args.file_types):
                         return True
                     suffixes = "".join(file.relative_path.suffixes)
-                    return suffixes in args.file_types or suffixes.startswith(".") and suffixes[1:] in args.file_types
+                    return suffixes in args.file_types or (suffixes.startswith(".") and suffixes[1:] in args.file_types)
 
             detections = vend.detect(test_repo, source_repo, file_filter=file_filter)
 

@@ -189,8 +189,7 @@ class _ClonedRepository(Repository):
         self._tempdir: TemporaryDirectory | None = None
         if GIT_PATH is None:
             msg = (
-                f"Error cloning {self._clone_uri}: `git` binary could not be found;"
-                f"please make sure it is in your PATH"
+                f"Error cloning {self._clone_uri}: `git` binary could not be found;please make sure it is in your PATH"
             )
             raise RepositoryError(msg)
         super().__init__(Path(), rev=rev)
@@ -346,7 +345,7 @@ class RemoteGitRepository(_ClonedRepository):
             log.info("⎘ cloning %s…", str(self))
         return super().__enter__()
 
-    def format_url(self, for_file: File | None = None, for_rev: str | None = None) -> str:  # noqa: C901
+    def format_url(self, for_file: File | None = None, for_rev: str | None = None) -> str:
         if for_rev is None:
             if self.rev:
                 for_rev = self.rev
@@ -358,17 +357,14 @@ class RemoteGitRepository(_ClonedRepository):
         result = urlparse(self.url)
         if result.netloc == "github.com" and for_rev:
             path = result.path
-            if path.endswith("/"):
-                path = path[:-1]
-            if path.endswith(".git"):
-                path = path[:-4]
+            path = path.removesuffix("/")
+            path = path.removesuffix(".git")
             if for_file is not None:
                 return result._replace(path=f"{path}/blob/{for_rev}/{for_file.relative_path!s}").geturl()
             return result._replace(path=f"{path}/commit/{for_rev}").geturl()
         if for_file is not None:
             url = self.url
-            if url.endswith("/"):
-                url = url[:-1]
+            url = url.removesuffix("/")
             if for_rev:
                 url = f"{url}@{for_rev}"
             return f"{url}/{for_file.relative_path!s}"

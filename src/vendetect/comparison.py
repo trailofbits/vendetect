@@ -63,14 +63,14 @@ class Comparison:
     slices2: tuple[Slice, ...]
 
     def __lt__(self, other: "Comparison") -> bool:
-        # TODO: Make the comparison metric user-specifiable
+        # TODO(evan.sultanik@trailofbits.com): Make the comparison metric user-specifiable (#14)  # noqa: FIX002
         # For now, disable comparison of token overlap, because that was causing too many false-positives
         # (I believe due to whitespace overlap)
         #
         # if self.token_overlap > other.token_overlap:
-        #     return True
+        #     return True  # noqa: ERA001
         # if self.token_overlap < other.token_overlap:
-        #     return False
+        #     return False  # noqa: ERA001
         oursim = self.similarity1 + self.similarity2
         theirsim = other.similarity1 + other.similarity2
         return oursim > theirsim

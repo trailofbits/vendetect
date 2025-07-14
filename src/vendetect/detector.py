@@ -44,7 +44,7 @@ class Status:
 
 
 @dataclass(frozen=True, unsafe_hash=True)
-class Source:
+class Source:  # noqa: PLW1641 to fix a false-positive from ruff
     file: File
     source_slices: tuple[Slice, ...]
 

@@ -44,7 +44,7 @@ class Status:
 
 
 @dataclass(frozen=True, unsafe_hash=True)
-class Source:  # noqa: PLW1641 (https://github.com/astral-sh/ruff/issues/18905)
+class Source:
     file: File
     source_slices: tuple[Slice, ...]
 

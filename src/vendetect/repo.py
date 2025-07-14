@@ -44,7 +44,7 @@ class Repository:
                 if self.is_git:
                     git_path: str = GIT_PATH  # type: ignore
                     self.rev = (
-                        subprocess.check_output([git_path, "rev-parse", "HEAD"], cwd=self.root_path)  #  noqa: S603
+                        subprocess.check_output([git_path, "rev-parse", "HEAD"], cwd=self.path)  #  noqa: S603
                         .strip()
                         .decode("utf-8")
                     )
@@ -61,7 +61,7 @@ class Repository:
     def __hash__(self) -> int:
         if self.rev:
             return hash(self.rev)
-        return hash(self.root_path)
+        return hash(self.path)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Repository):
@@ -70,7 +70,7 @@ class Repository:
             return self.rev == other.rev
         if self.rev or other.rev:
             return False
-        return self.root_path == other.root_path
+        return self.path == other.path
 
     def __enter__(self) -> Self:
         return self
@@ -97,7 +97,7 @@ class Repository:
             )
             raise RepositoryError(msg)
         if path.is_absolute():
-            path = path.relative_to(self.root_path)
+            path = path.relative_to(self.path)
         prev_version = (
             subprocess.check_output(  # noqa: S603
                 [
@@ -112,7 +112,7 @@ class Repository:
                     "--",
                     str(path),
                 ],
-                cwd=self.root_path,
+                cwd=self.path,
             )
             .decode("utf-8")
             .strip()
@@ -131,7 +131,7 @@ class Repository:
             return (
                 subprocess.check_output(  # noqa: S603
                     [GIT_PATH, "rev-parse", "--is-shallow-repository"],  # type: ignore
-                    cwd=self.root_path,
+                    cwd=self.path,
                     stderr=subprocess.DEVNULL,
                 ).strip()
                 != b"false"
@@ -147,7 +147,7 @@ class Repository:
         try:
             return Path(
                 subprocess.check_output(  # noqa: S603
-                    [GIT_PATH, "-C", str(self.root_path), "rev-parse", "--show-toplevel"],
+                    [GIT_PATH, "-C", str(self.path), "rev-parse", "--show-toplevel"],
                     stderr=subprocess.DEVNULL,
                 )
                 .strip()
@@ -163,7 +163,7 @@ class Repository:
         try:
             return (
                 subprocess.check_output(  # noqa: S603
-                    [GIT_PATH, "-C", str(self.root_path), "rev-parse", "--is-inside-work-tree"],
+                    [GIT_PATH, "-C", str(self.path), "rev-parse", "--is-inside-work-tree"],
                     stderr=subprocess.DEVNULL,
                 )
                 .strip()
@@ -212,12 +212,12 @@ class Repository:
         yield from self.files()
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.root_path!r})"
+        return f"{self.__class__.__name__}({self.root_path!r}, rev={self.rev!r}, subdir={self.subdir!r})"
 
     def __str__(self) -> str:
         if self.rev:
-            return f"{self.root_path!s}@{self.rev}"
-        return f"{self.root_path!s}"
+            return f"{self.path!s}@{self.rev}"
+        return f"{self.path!s}"
 
     @classmethod
     def load(cls, repo_uri: str, subdir: Path | str | None = None) -> "Repository":

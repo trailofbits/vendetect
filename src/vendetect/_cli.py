@@ -1,5 +1,7 @@
 import argparse
 import csv
+from difflib import ndiff
+from itertools import zip_longest
 import json
 import logging
 import sys
@@ -8,7 +10,7 @@ from pathlib import Path
 from typing import TextIO
 
 from rich import traceback
-from rich.console import Console
+from rich.console import Console, ConsoleRenderable, Group
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
@@ -150,6 +152,7 @@ def output_rich(
     console: Console,
     min_similarity: float = 0.5,
     output_file: TextIO | None = None,
+    collapse_identical_lines_threshold: int = 10
 ) -> None:
     # If an output file is specified, create a new Console for it
     file_console = Console(file=output_file) if output_file else console
@@ -187,41 +190,129 @@ def output_rich(
 
             match_table = Table()
             match_table.add_column(f"{d.test.relative_path.name!s}", style="cyan")
+            match_table.add_column(" ")
             match_table.add_column(f"{d.source.relative_path.name!s}", style="green")
             first = True
 
-            for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
+            test_lines = test_content.splitlines(keepends=True)
+            source_lines = source_content.splitlines(keepends=True)
+
+            test_line_start_offsets: list[int] = [0]
+            for line in test_lines[:-1]:
+                test_line_start_offsets.append(test_line_start_offsets[-1] + len(line))
+            source_line_start_offsets: list[int] = [0]
+            for line in source_lines[:-1]:
+                source_line_start_offsets.append(source_line_start_offsets[-1] + len(line))
+
+            test_lexer = get_lexer_for_filename(d.test.relative_path.name)
+            source_lexer = get_lexer_for_filename(d.source.relative_path.name)
+
+            for (test_start_offset, test_end_offset), (source_start_offset, source_end_offset) \
+                    in zip(test_slices, source_slices, strict=False):
                 # Extract the content for the detected slices
-                test_lines = test_content.splitlines()
-                source_lines = source_content.splitlines()
 
-                # Convert character positions to line numbers (approximate)
-                test_slice_content = "\n".join(test_lines[max(0, test_start - 10) : test_end + 10])
-                source_slice_content = "\n".join(source_lines[max(0, source_start - 10) : source_end + 10])
+                # Convert character positions to line numbers
+                test_start = 0
+                while test_start + 1 < len(test_line_start_offsets) and \
+                        test_line_start_offsets[test_start + 1] < test_start_offset:
+                    test_start += 1
+                test_end = test_start + 1
+                while test_end < len(test_line_start_offsets) and \
+                        test_line_start_offsets[test_end] < test_end_offset:
+                    test_end += 1
+                source_start = 0
+                while source_start + 1 < len(source_line_start_offsets) and \
+                        source_line_start_offsets[source_start + 1] < source_start_offset:
+                    source_start += 1
+                source_end = source_start + 1
+                while source_end < len(source_line_start_offsets) and \
+                        source_line_start_offsets[source_end] < source_end_offset:
+                    source_end += 1
 
-                # Create syntax-highlighted code panels
-                test_syntax = Syntax(
-                    test_slice_content,
-                    lexer=get_lexer_for_filename(d.test.relative_path.name),
-                    line_numbers=True,
-                    start_line=max(1, test_start - 10),
-                    highlight_lines=set(range(max(1, test_start), test_end + 1)),
-                )
+                test_slice_content = test_lines[max(0, test_start) : test_end]
+                source_slice_content = source_lines[max(0, source_start) : source_end]
 
-                source_syntax = Syntax(
-                    source_slice_content,
-                    lexer=get_lexer_for_filename(d.source.relative_path.name),
-                    line_numbers=True,
-                    start_line=max(1, source_start - 10),
-                    highlight_lines=set(range(max(1, source_start), source_end + 1)),
-                )
+                test_line = max(1, test_start + 1)
+                source_line = max(1, source_start + 1)
+                test_rows: list[ConsoleRenderable] = []
+                source_rows: list[ConsoleRenderable] = []
+                diff_rows: list[ConsoleRenderable] = []
+                same_lines = 0
+
+                def add_test_row(code: str):
+                    test_rows.append(Syntax(
+                        code,
+                        lexer=test_lexer,
+                        line_numbers=True,
+                        start_line=test_line
+                    ))
+                    if len(test_rows) < len(source_rows):
+                        while len(diff_rows) < len(test_rows):
+                            diff_rows.append(Text("✓", style="green reverse"))
+
+                def add_source_row(code: str):
+                    source_rows.append(Syntax(
+                        code,
+                        lexer=source_lexer,
+                        line_numbers=True,
+                        start_line=source_line
+                    ))
+                    if len(source_rows) < len(test_rows):
+                        while len(diff_rows) < len(source_rows):
+                            diff_rows.append(Text("✓", style="green reverse"))
+
+                def add_identical_row(num_identical: int):
+                    for _ in range(num_identical):
+                        test_rows.pop()
+                        source_rows.pop()
+                        diff_rows.pop()
+                    test_msg = f"<{same_lines} identical lines starting on line {test_line - num_identical}>"
+                    source_msg = f"<{same_lines} identical lines starting on line {source_line - num_identical}>"
+                    test_rows.append(Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"))
+                    test_rows.append(Text(f"        {test_msg}", style="red reverse bold"))
+                    test_rows.append(Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"))
+                    source_rows.append(Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"))
+                    source_rows.append(Text(f"        {source_msg}", style="red reverse bold"))
+                    source_rows.append(Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"))
+                    diff_rows.append(Text("↔", style="red reverse bold"))
+                    diff_rows.append(Text("↔", style="red reverse bold"))
+                    diff_rows.append(Text("↔", style="red reverse bold"))
+
+
+                for diff_line in ndiff(test_slice_content, source_slice_content):
+                    if diff_line.startswith("  "):
+                        max_lines = max(len(test_rows), len(source_rows))
+                        source_rows.extend([Text("")] * (max_lines - len(source_rows)))
+                        test_rows.extend([Text("")] * (max_lines - len(test_rows)))
+                        diff_rows.extend([Text("✓", style="green reverse")] * (max_lines - len(diff_rows)))
+                        same_lines += 1
+                        add_test_row(diff_line[2:].rstrip())
+                        add_source_row(diff_line[2:].rstrip())
+                        diff_rows.append(Text("↔", style="red reverse bold"))
+                        test_line += 1
+                        source_line += 1
+                    else:
+                        if diff_line[:2] in ("- ", "+ ") and same_lines >= collapse_identical_lines_threshold:
+                            add_identical_row(same_lines)
+                        if diff_line.startswith("- "):
+                            add_test_row(diff_line[2:].rstrip())
+                            same_lines = 0
+                            test_line += 1
+                        elif diff_line.startswith("+ "):
+                            add_source_row(diff_line[2:].rstrip())
+                            same_lines = 0
+                            source_line += 1
+                if same_lines >= collapse_identical_lines_threshold:
+                    add_identical_row(same_lines)
 
                 if first:
                     first = False
                 else:
-                    match_table.add_row(Text("  ⋮", style="dim"), Text("  ⋮", style="dim"))
+                    match_table.add_row(Text("  ⋮", style="dim"), Text("⋮", style="dim"),
+                                        Text("  ⋮", style="dim"))
 
-                match_table.add_row(test_syntax, source_syntax)
+                for c1, c2, c3 in zip_longest(test_rows, diff_rows, source_rows, fillvalue=Text("")):
+                    match_table.add_row(c1, c2, c3)
 
             if not first:
                 context_panel = Panel.fit(

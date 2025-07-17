@@ -274,9 +274,9 @@ def output_rich(
                     source_rows.append(Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"))
                     source_rows.append(Text(f"        {source_msg}", style="red reverse bold"))
                     source_rows.append(Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"))
-                    diff_rows.append(Text("↔", style="red reverse bold"))
-                    diff_rows.append(Text("↔", style="red reverse bold"))
-                    diff_rows.append(Text("↔", style="red reverse bold"))
+                    diff_rows.append(Text("←", style="red reverse bold"))
+                    diff_rows.append(Text("←", style="red reverse bold"))
+                    diff_rows.append(Text("←", style="red reverse bold"))
 
 
                 for diff_line in ndiff(test_slice_content, source_slice_content):
@@ -288,7 +288,7 @@ def output_rich(
                         same_lines += 1
                         add_test_row(diff_line[2:].rstrip())
                         add_source_row(diff_line[2:].rstrip())
-                        diff_rows.append(Text("↔", style="red reverse bold"))
+                        diff_rows.append(Text("←", style="red reverse bold"))
                         test_line += 1
                         source_line += 1
                     else:

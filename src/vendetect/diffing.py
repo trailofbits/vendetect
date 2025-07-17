@@ -1,6 +1,5 @@
 from difflib import ndiff
 from enum import Enum
-from itertools import zip_longest
 from typing import Iterable, Iterator, Self
 
 from .repo import File

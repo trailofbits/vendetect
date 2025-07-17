@@ -1,7 +1,5 @@
 import argparse
 import csv
-from difflib import ndiff
-from itertools import zip_longest
 import json
 import logging
 import sys
@@ -10,7 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from rich import traceback
-from rich.console import Console, ConsoleRenderable
+from rich.console import Console
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
@@ -19,6 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .detector import Detection, Status, VenDetector, get_lexer_for_filename
+from .diffing import CollapsedDiffLine, DiffContext, Differ, Document, DiffLineStatus
 from .errors import VendetectError
 from .repo import File, Repository
 
@@ -181,8 +180,8 @@ def output_rich(
                 return file.path.read_text()
 
         try:
-            test_content = read_file_content(d.test)
-            source_content = read_file_content(d.source)
+            test_doc = Document.from_file(d.test)
+            source_doc = Document.from_file(d.source)
 
             # Create a side-by-side view of the detected slices
             test_slices = d.comparison.slices1
@@ -194,119 +193,64 @@ def output_rich(
             match_table.add_column(f"{d.source.relative_path.name!s}", style="green")
             first = True
 
-            test_lines = test_content.splitlines(keepends=True)
-            source_lines = source_content.splitlines(keepends=True)
-
-            test_line_start_offsets: list[int] = [0]
-            for line in test_lines[:-1]:
-                test_line_start_offsets.append(test_line_start_offsets[-1] + len(line))
-            source_line_start_offsets: list[int] = [0]
-            for line in source_lines[:-1]:
-                source_line_start_offsets.append(source_line_start_offsets[-1] + len(line))
-
             test_lexer = get_lexer_for_filename(d.test.relative_path.name)
             source_lexer = get_lexer_for_filename(d.source.relative_path.name)
 
             for (test_start_offset, test_end_offset), (source_start_offset, source_end_offset) in zip(
                 test_slices, source_slices, strict=False
             ):
-                # Extract the content for the detected slices
-
-                # Convert character positions to line numbers
-                test_start = 0
-                while (
-                    test_start + 1 < len(test_line_start_offsets)
-                    and test_line_start_offsets[test_start + 1] < test_start_offset
-                ):
-                    test_start += 1
-                test_end = test_start + 1
-                while test_end < len(test_line_start_offsets) and test_line_start_offsets[test_end] < test_end_offset:
-                    test_end += 1
-                source_start = 0
-                while (
-                    source_start + 1 < len(source_line_start_offsets)
-                    and source_line_start_offsets[source_start + 1] < source_start_offset
-                ):
-                    source_start += 1
-                source_end = source_start + 1
-                while (
-                    source_end < len(source_line_start_offsets)
-                    and source_line_start_offsets[source_end] < source_end_offset
-                ):
-                    source_end += 1
-
-                test_slice_content = test_lines[max(0, test_start) : test_end]
-                source_slice_content = source_lines[max(0, source_start) : source_end]
-
-                test_line = max(1, test_start + 1)
-                source_line = max(1, source_start + 1)
-                test_rows: list[ConsoleRenderable] = []
-                source_rows: list[ConsoleRenderable] = []
-                diff_rows: list[ConsoleRenderable] = []
-                same_lines = 0
-
-                def add_test_row(code: str):
-                    test_rows.append(Syntax(code, lexer=test_lexer, line_numbers=True, start_line=test_line))
-                    if len(test_rows) < len(source_rows):
-                        while len(diff_rows) < len(test_rows):
-                            diff_rows.append(Text("✓", style="green reverse"))
-
-                def add_source_row(code: str):
-                    source_rows.append(Syntax(code, lexer=source_lexer, line_numbers=True, start_line=source_line))
-                    if len(source_rows) < len(test_rows):
-                        while len(diff_rows) < len(source_rows):
-                            diff_rows.append(Text("✓", style="green reverse"))
-
-                def add_identical_row(num_identical: int):
-                    for _ in range(num_identical):
-                        test_rows.pop()
-                        source_rows.pop()
-                        diff_rows.pop()
-                    test_msg = f"<{same_lines} identical lines starting on line {test_line - num_identical}>"
-                    source_msg = f"<{same_lines} identical lines starting on line {source_line - num_identical}>"
-                    test_rows.append(Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"))
-                    test_rows.append(Text(f"        {test_msg}", style="red reverse bold"))
-                    test_rows.append(Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"))
-                    source_rows.append(Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"))
-                    source_rows.append(Text(f"        {source_msg}", style="red reverse bold"))
-                    source_rows.append(Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"))
-                    diff_rows.append(Text("←", style="red reverse bold"))
-                    diff_rows.append(Text("←", style="red reverse bold"))
-                    diff_rows.append(Text("←", style="red reverse bold"))
-
-                for diff_line in ndiff(test_slice_content, source_slice_content):
-                    if diff_line.startswith("  "):
-                        max_lines = max(len(test_rows), len(source_rows))
-                        source_rows.extend([Text("")] * (max_lines - len(source_rows)))
-                        test_rows.extend([Text("")] * (max_lines - len(test_rows)))
-                        diff_rows.extend([Text("✓", style="green reverse")] * (max_lines - len(diff_rows)))
-                        same_lines += 1
-                        add_test_row(diff_line[2:].rstrip())
-                        add_source_row(diff_line[2:].rstrip())
-                        diff_rows.append(Text("←", style="red reverse bold"))
-                        test_line += 1
-                        source_line += 1
-                    else:
-                        if diff_line[:2] in ("- ", "+ ") and same_lines >= collapse_identical_lines_threshold:
-                            add_identical_row(same_lines)
-                        if diff_line.startswith("- "):
-                            add_test_row(diff_line[2:].rstrip())
-                            same_lines = 0
-                            test_line += 1
-                        elif diff_line.startswith("+ "):
-                            add_source_row(diff_line[2:].rstrip())
-                            same_lines = 0
-                            source_line += 1
-                if same_lines >= collapse_identical_lines_threshold:
-                    add_identical_row(same_lines)
-
                 if first:
                     first = False
                 else:
                     match_table.add_row(Text("  ⋮", style="dim"), Text("⋮", style="dim"), Text("  ⋮", style="dim"))
 
-                for c1, c2, c3 in zip_longest(test_rows, diff_rows, source_rows, fillvalue=Text("")):
-                    match_table.add_row(c1, c2, c3)
+                for diff_line in Differ(test=test_doc, source=source_doc).diff(
+                    context=DiffContext.from_offsets(
+                        test=test_doc,
+                        source=source_doc,
+                        test_start_offset=test_start_offset,
+                        test_end_offset=test_end_offset,
+                        source_start_offset=source_start_offset,
+                        source_end_offset=source_end_offset,
+                        collapse_identical_lines_threshold=collapse_identical_lines_threshold,
+                    )
+                ):
+                    if isinstance(diff_line, CollapsedDiffLine):
+                        test_msg = diff_line.left
+                        source_msg = diff_line.right
+                        match_table.add_row(
+                            Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
+                            Text("←", style="red reverse bold"),
+                            Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
+                        )
+                        match_table.add_row(
+                            Text(f"        {test_msg}", style="red reverse bold"),
+                            Text("←", style="red reverse bold"),
+                            Text(f"        {source_msg}", style="red reverse bold"),
+                        )
+                        match_table.add_row(
+                            Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
+                            Text("←", style="red reverse bold"),
+                            Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
+                        )
+                    else:
+                        if diff_line.status == DiffLineStatus.COPIED:
+                            status_col = Text("←", style="red reverse bold")
+                        else:
+                            status_col = Text("✓", style="green reverse")
+                        if diff_line.left is None:
+                            left = Text("")
+                        else:
+                            left = Syntax(
+                                diff_line.left, lexer=test_lexer, line_numbers=True, start_line=diff_line.left_line
+                            )
+                        if diff_line.right is None:
+                            right = Text("")
+                        else:
+                            right = Syntax(
+                                diff_line.right, lexer=source_lexer, line_numbers=True, start_line=diff_line.right_line
+                            )
+                        match_table.add_row(left, status_col, right)
 
             if not first:
                 context_panel = Panel.fit(

@@ -2,17 +2,12 @@ from difflib import ndiff
 from enum import Enum
 from typing import Iterable, Iterator, Self  # noqa: UP035
 
-from .repo import File
+from .repo import File, Rounding
 
 
 class DiffLineStatus(Enum):
     COPIED = "COPIED"
     DIFFERENT = "DIFFERENT"
-
-
-class Rounding(Enum):
-    DOWN = "DOWN"
-    UP = "UP"
 
 
 class DiffLine:

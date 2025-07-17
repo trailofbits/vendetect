@@ -12,7 +12,7 @@ from pygments.util import ClassNotFound
 
 from .comparison import Comparator, Comparison, Slice
 from .copydetect import CopyDetectComparator
-from .repo import File, Repository
+from .repo import File, Repository, Rounding
 
 log = getLogger(__name__)
 F = TypeVar("F")
@@ -61,6 +61,11 @@ class Source:  # noqa: PLW1641 to fix a false-positive from ruff
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.file!r}, {self.source_slices!r})"
 
+    def byte_offset_slice_to_lines_slice(self, to_convert: Slice) -> Slice:
+        from_line = self.file.get_line(to_convert.from_index, rounding=Rounding.DOWN)
+        to_line = self.file.get_line(to_convert.to_index, rounding=Rounding.UP, min_line=from_line+1)
+        return Slice(from_line, to_line)
+
     def to_str(self, max_slices: int = -1) -> str:
         file_str = str(self.file)
         if max_slices == 0:
@@ -68,11 +73,12 @@ class Source:  # noqa: PLW1641 to fix a false-positive from ruff
                 return f"{file_str}:…"
             return file_str
         slices = self.source_slices if max_slices < 0 else self.source_slices[:max_slices]
+        slices = [self.byte_offset_slice_to_lines_slice(s) for s in slices]
         if file_str.startswith("http"):
-            slices_str = ";".join(f"L{s.from_index}-L{s.to_index}" for s in slices)
+            slices_str = ";".join(f"L{s.from_index + 1}-L{s.to_index + 1}" for s in slices)
             slices_str = f"#{slices_str}"
         else:
-            slices_str = ";".join(f"{s.from_index}-{s.to_index}" for s in slices)
+            slices_str = ";".join(f"{s.from_index + 1}-{s.to_index + 1}" for s in slices)
             slices_str = f":{slices_str}"
         if len(slices) < len(self.source_slices):
             slices_str = f"{slices_str};…"

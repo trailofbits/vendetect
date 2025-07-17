@@ -215,19 +215,19 @@ def output_rich(  # noqa: PLR0912 PLR0915 C901
                         test_msg = diff_line.left
                         source_msg = diff_line.right
                         match_table.add_row(
-                            Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
+                            Text(f"    {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
                             Text("←", style="red reverse bold"),
-                            Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
+                            Text(f"    {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
                         )
                         match_table.add_row(
-                            Text(f"        {test_msg}", style="red reverse bold"),
+                            Text(f"    {test_msg}    ", style="red reverse bold"),
                             Text("←", style="red reverse bold"),
-                            Text(f"        {source_msg}", style="red reverse bold"),
+                            Text(f"    {source_msg}", style="red reverse bold"),
                         )
                         match_table.add_row(
-                            Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
+                            Text(f"    {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
                             Text("←", style="red reverse bold"),
-                            Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
+                            Text(f"    {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
                         )
                     else:
                         if diff_line.status == DiffLineStatus.COPIED:

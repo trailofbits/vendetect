@@ -2,8 +2,10 @@ import shutil
 import subprocess
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from enum import Enum
 from functools import wraps
 from logging import getLogger
+from os import SEEK_END
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Optional, ParamSpec, Self, TypeVar
@@ -17,6 +19,11 @@ log = getLogger(__name__)
 
 T = TypeVar("T")
 P = ParamSpec("P")
+
+
+class Rounding(Enum):
+    DOWN = "DOWN"
+    UP = "UP"
 
 
 class RepositoryError(VendetectRuntimeError):
@@ -271,16 +278,32 @@ class _ClonedRepository(Repository):
         super().__exit__(exc_type, exc_val, exc_tb)
 
 
-@dataclass(frozen=True, unsafe_hash=True, init=False)
+@dataclass(frozen=True, init=False)
 class File:
     relative_path: Path
     repo: Repository
+    _line_start_offsets: list[int]
 
     def __init__(self, path: Path, repo: Repository):
         if path.is_absolute():
             path = path.relative_to(repo.root_path)
         object.__setattr__(self, "relative_path", path)
         object.__setattr__(self, "repo", repo)
+        object.__setattr__(self, "_line_start_offsets", [])
+
+    @property
+    def line_start_offsets(self) -> list[int]:
+        if not self._line_start_offsets:
+            with self.repo:
+                with open(self.path, "r") as f:
+                    self._line_start_offsets.append(0)
+                    for line in f:
+                        self._line_start_offsets.append(self._line_start_offsets[-1] + len(line))
+                    self._line_start_offsets.pop()
+        return self._line_start_offsets
+
+    def __hash__(self) -> int:
+        return hash((self.relative_path, self.repo))
 
     @property
     def path(self) -> Path:
@@ -292,6 +315,24 @@ class File:
             if self.path.is_symlink():
                 return self.__class__(self.path.readlink(), self.repo)
             return self
+
+    def get_line(self, byte_offset: int, rounding: Rounding = Rounding.DOWN, min_line: int = 0):
+        """Returns the zero-indexed line associated with byte offset `byte_offset`"""
+        if byte_offset < 0:
+            with self.repo:
+                with open(self.path, "r") as f:
+                    f.seek(byte_offset, SEEK_END)
+                    byte_offset = f.tell()
+        if rounding == Rounding.DOWN:
+            start = max(min_line, 0)
+            while start + 1 < len(self.line_start_offsets) and self.line_start_offsets[start + 1] < byte_offset:
+                start += 1
+            return start
+        # round up
+        end = max(min_line, 0)
+        while end < len(self.line_start_offsets) and self.line_start_offsets[end] < byte_offset:
+            end += 1
+        return end
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.relative_path!r}, {self.repo!r})"

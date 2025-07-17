@@ -183,7 +183,9 @@ class Repository:
         if GIT_PATH is None:
             msg = "`git` binary could not be found"
             raise RepositoryError(msg)
-        for line in subprocess.check_output([GIT_PATH, "ls-files"], cwd=self.path).splitlines():  # noqa: S603
+        for line in subprocess.check_output(  # noqa: S603
+            [GIT_PATH, "ls-files", "--cached", "--others", "--exclude-standard"], cwd=self.path
+        ).splitlines():
             line = line.strip()  # noqa: PLW2901
             if line:
                 path = Path(line.decode("utf-8"))

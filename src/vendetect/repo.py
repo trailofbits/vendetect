@@ -33,25 +33,35 @@ def with_self(func: Callable[P, T]) -> Callable[P, T]:
 
 
 class Repository:
-    def __init__(self, root_path: Path, rev: str | None = None):
+    def __init__(self, root_path: Path, rev: str | None = None, subdir: Path | None = None):
         self.root_path: Path = root_path
+        if subdir is not None and subdir.is_absolute():
+            subdir = subdir.relative_to(root_path)
+        self.subdir: Path | None = subdir
         self.rev: str = ""
         if rev is None:
             with self:
                 if self.is_git:
                     git_path: str = GIT_PATH  # type: ignore
                     self.rev = (
-                        subprocess.check_output([git_path, "rev-parse", "HEAD"], cwd=self.root_path)  #  noqa: S603
+                        subprocess.check_output([git_path, "rev-parse", "HEAD"], cwd=self.path)  #  noqa: S603
                         .strip()
                         .decode("utf-8")
                     )
         else:
             self.rev = rev
 
+    @property
+    @with_self
+    def path(self) -> Path:
+        if self.subdir is None:
+            return self.root_path
+        return self.root_path / self.subdir
+
     def __hash__(self) -> int:
         if self.rev:
             return hash(self.rev)
-        return hash(self.root_path)
+        return hash(self.path)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Repository):
@@ -60,7 +70,7 @@ class Repository:
             return self.rev == other.rev
         if self.rev or other.rev:
             return False
-        return self.root_path == other.root_path
+        return self.path == other.path
 
     def __enter__(self) -> Self:
         return self
@@ -87,7 +97,7 @@ class Repository:
             )
             raise RepositoryError(msg)
         if path.is_absolute():
-            path = path.relative_to(self.root_path)
+            path = path.relative_to(self.path)
         prev_version = (
             subprocess.check_output(  # noqa: S603
                 [
@@ -102,7 +112,7 @@ class Repository:
                     "--",
                     str(path),
                 ],
-                cwd=self.root_path,
+                cwd=self.path,
             )
             .decode("utf-8")
             .strip()
@@ -121,7 +131,7 @@ class Repository:
             return (
                 subprocess.check_output(  # noqa: S603
                     [GIT_PATH, "rev-parse", "--is-shallow-repository"],  # type: ignore
-                    cwd=self.root_path,
+                    cwd=self.path,
                     stderr=subprocess.DEVNULL,
                 ).strip()
                 != b"false"
@@ -131,24 +141,60 @@ class Repository:
 
     @property
     @with_self
+    def git_root(self) -> Path | None:
+        if GIT_PATH is None:
+            return None
+        try:
+            return Path(
+                subprocess.check_output(  # noqa: S603
+                    [GIT_PATH, "-C", str(self.path), "rev-parse", "--show-toplevel"],
+                    stderr=subprocess.DEVNULL,
+                )
+                .strip()
+                .decode("utf-8")
+            )
+        except subprocess.CalledProcessError:
+            return None
+
+    @with_self
+    def is_inside_git_work_tree(self) -> bool:
+        if GIT_PATH is None:
+            return False
+        try:
+            return (
+                subprocess.check_output(  # noqa: S603
+                    [GIT_PATH, "-C", str(self.path), "rev-parse", "--is-inside-work-tree"],
+                    stderr=subprocess.DEVNULL,
+                )
+                .strip()
+                .lower()
+                == b"true"
+            )
+        except subprocess.CalledProcessError:
+            return False
+
+    @property
+    @with_self
     def is_git(self) -> bool:
-        return self.root_path.is_dir() and (self.root_path / ".git").is_dir()
+        return self.root_path.is_dir() and ((self.root_path / ".git").is_dir() or self.is_inside_git_work_tree())
 
     @with_self
     def git_files(self) -> Iterator["File"]:
         if GIT_PATH is None:
             msg = "`git` binary could not be found"
             raise RepositoryError(msg)
-        for line in subprocess.check_output([GIT_PATH, "ls-files"], cwd=self.root_path).splitlines():  # noqa: S603
+        for line in subprocess.check_output([GIT_PATH, "ls-files"], cwd=self.path).splitlines():  # noqa: S603
             line = line.strip()  # noqa: PLW2901
             if line:
                 path = Path(line.decode("utf-8"))
+                if self.subdir is not None:
+                    path = self.subdir / path
                 yield File(path, self)
 
     @with_self
     def files(self) -> Iterator["File"]:
         if GIT_PATH is None or not self.is_git:
-            stack: list[File] = [File(self.root_path, self)]
+            stack: list[File] = [File(self.path, self)]
         else:
             stack = list(reversed(list(self.git_files())))
         history = set()
@@ -166,33 +212,38 @@ class Repository:
         yield from self.files()
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.root_path!r})"
+        return f"{self.__class__.__name__}({self.root_path!r}, rev={self.rev!r}, subdir={self.subdir!r})"
 
     def __str__(self) -> str:
         if self.rev:
-            return f"{self.root_path!s}@{self.rev}"
-        return f"{self.root_path!s}"
+            return f"{self.path!s}@{self.rev}"
+        return f"{self.path!s}"
 
     @classmethod
-    def load(cls, repo_uri: str) -> "Repository":
+    def load(cls, repo_uri: str, subdir: Path | str | None = None) -> "Repository":
         # first see if it is a local repo
         repo_uri_path = Path(repo_uri).absolute()
+        if subdir is not None and not isinstance(subdir, Path):
+            subdir = Path(subdir)
         if repo_uri_path.exists() and repo_uri_path.is_dir():
-            return Repository(repo_uri_path)
-        return RemoteGitRepository(repo_uri)
+            return Repository(repo_uri_path, subdir=subdir)
+        return RemoteGitRepository(repo_uri, subdir=subdir)
 
 
 class _ClonedRepository(Repository):
-    def __init__(self, clone_uri: str, rev: str | None = None):
+    def __init__(self, clone_uri: str, rev: str | None = None, subdir: Path | None = None):
         self._clone_uri: str = clone_uri
         self._entries: int = 0
         self._tempdir: TemporaryDirectory | None = None
+        if subdir is not None and subdir.is_absolute():
+            msg = f"Invalid subdirectory {subdir!s}: the path must be relative, not absolute"
+            raise ValueError(msg)
         if GIT_PATH is None:
             msg = (
                 f"Error cloning {self._clone_uri}: `git` binary could not be found;please make sure it is in your PATH"
             )
             raise RepositoryError(msg)
-        super().__init__(Path(), rev=rev)
+        super().__init__(Path(), rev=rev, subdir=subdir)
 
     def __enter__(self) -> Self:
         self._entries += 1
@@ -329,12 +380,12 @@ class RepositoryCommit(_ClonedRepository):
 
 
 class RemoteGitRepository(_ClonedRepository):
-    def __init__(self, url: str):
+    def __init__(self, url: str, subdir: Path | None = None):
         self.url: str = url
-        super().__init__(url, rev="")
+        super().__init__(url, rev="", subdir=subdir)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.url!r})"
+        return f"{self.__class__.__name__}({self.url!r}, subdir={self.subdir!r})"
 
     @property
     def is_git(self) -> bool:

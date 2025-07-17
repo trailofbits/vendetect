@@ -14,8 +14,10 @@ Vendetect helps identify copied or vendored code between repositories, making it
 
 Key features:
 - Compare code between two repositories (local or remote)
+- Analyze specific subdirectories within repositories
 - Identify files with similar code and display them side-by-side
 - Show similarity percentages for matched code
+- Filter by file types and adjust similarity thresholds
 - Support for different programming languages through Pygments lexers
 - Similarity is _not_ solely based upon symbol names; vendetect also considers semantics
 
@@ -66,7 +68,7 @@ Where:
 - `TEST_REPO`: Path or URL to the repository you want to check for copied code
 - `SOURCE_REPO`: Path or URL to the repository that is the potential source of the code
 
-### Example
+### Examples
 
 ```bash
 # Compare two local repositories
@@ -74,15 +76,76 @@ vendetect /path/to/my/project /path/to/another/project
 
 # Compare a local project with a remote repository
 vendetect /path/to/my/project https://github.com/example/repo.git
+
+# Compare only specific subdirectories within repositories
+vendetect /path/to/my/project https://github.com/example/repo.git \
+  --test-subdir src/components \
+  --source-subdir lib/ui
+
+# Filter by file types and adjust similarity threshold
+vendetect /path/to/my/project /path/to/another/project \
+  --type py --type js \
+  --min-similarity 0.8
 ```
 
 ### Options
 
 ```
---format FORMAT    Output format: rich, csv, or json (default=rich)
---log-level LEVEL  Sets the log level (default=INFO)
---debug            Equivalent to --log-level=DEBUG
---quiet            Equivalent to --log-level=CRITICAL
+--format FORMAT              Output format: rich, csv, or json (default=rich)
+--output OUTPUT              Output file path (default: stdout)
+--force                      Force overwrite of existing output file
+--type FILE_TYPES, -t        File extension to consider (can be used multiple times)
+--min-similarity THRESHOLD   Minimum similarity threshold (range: 0.0-1.0, default: 0.5)
+--test-subdir DIR, -ts       Subdirectory within TEST_REPO to analyze
+--source-subdir DIR, -ss     Subdirectory within SOURCE_REPO to analyze
+--incremental                Enable incremental result reporting
+--batch-size SIZE            Number of files to process per batch (default: 100)
+--max-history-depth DEPTH    Maximum commit history depth (default: -1 = entire history)
+--log-level LEVEL            Sets the log level (default=INFO)
+--debug                      Equivalent to --log-level=DEBUG
+--quiet                      Equivalent to --log-level=CRITICAL
+```
+
+### Advanced Features
+
+#### Subdirectory Analysis
+When working with large repositories, you can focus analysis on specific subdirectories:
+
+```bash
+# Analyze only the src/ directory in both repositories
+vendetect /path/to/my/project /path/to/another/project \
+  --test-subdir src --source-subdir src
+
+# Compare frontend code in one repo with backend in another
+vendetect /path/to/frontend-repo /path/to/backend-repo \
+  --test-subdir client/src --source-subdir server/utils
+```
+
+This is particularly useful for:
+- Focusing on relevant code sections
+- Reducing analysis time for large repositories
+- Comparing similar modules across different project structures
+
+#### File Type Filtering
+Control which files are analyzed by specifying file extensions:
+
+```bash
+# Only analyze Python files
+vendetect /path/to/my/project /path/to/another/project --type py
+
+# Analyze multiple file types
+vendetect /path/to/my/project /path/to/another/project --type py --type js --type ts
+```
+
+#### Similarity Thresholds
+Adjust the minimum similarity threshold to filter results:
+
+```bash
+# Show only high-confidence matches (80% similarity or higher)
+vendetect /path/to/my/project /path/to/another/project --min-similarity 0.8
+
+# Show all potential matches (lower threshold)
+vendetect /path/to/my/project /path/to/another/project --min-similarity 0.3
 ```
 
 ### Output Formats
@@ -95,12 +158,12 @@ Vendetect supports three output formats:
 
 Example using CSV output:
 ```bash
-vendetect /path/to/my/project /path/to/another/project --format csv > results.csv
+vendetect /path/to/my/project /path/to/another/project --format csv --output results.csv
 ```
 
 Example using JSON output:
 ```bash
-vendetect /path/to/my/project /path/to/another/project --format json > results.json
+vendetect /path/to/my/project /path/to/another/project --format json --output results.json
 ```
 
 ## How it works 🧐

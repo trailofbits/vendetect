@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .detector import Detection, Status, VenDetector, get_lexer_for_filename
-from .diffing import CollapsedDiffLine, Differ, DiffLineStatus, Document
+from .diffing import CollapsedDiffLine, Differ, DiffLineStatus, Document, normalized_edit_distance
 from .errors import VendetectError
 from .repo import File, Repository
 
@@ -233,7 +233,13 @@ def output_rich(  # noqa: PLR0912 PLR0915 C901
                         if diff_line.status == DiffLineStatus.COPIED:
                             status_col = Text("←", style="red reverse bold")
                         else:
-                            status_col = Text("✓", style="green reverse")
+                            # calculate the normalized edit distance
+                            if diff_line.left is not None and diff_line.right is not None and \
+                                    normalized_edit_distance(diff_line.left, diff_line.right) < 0.75:
+                                # the lines are at least 25% similar!
+                                status_col = Text("↜", style="yellow reverse")
+                            else:
+                                status_col = Text("✓", style="green reverse")
                         if diff_line.left is None:
                             left: ConsoleRenderable = Text("")
                         else:

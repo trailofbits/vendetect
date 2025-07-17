@@ -63,7 +63,7 @@ class Source:  # noqa: PLW1641 to fix a false-positive from ruff
 
     def byte_offset_slice_to_lines_slice(self, to_convert: Slice) -> Slice:
         from_line = self.file.get_line(to_convert.from_index, rounding=Rounding.DOWN)
-        to_line = self.file.get_line(to_convert.to_index, rounding=Rounding.UP, min_line=from_line+1)
+        to_line = self.file.get_line(to_convert.to_index, rounding=Rounding.UP, min_line=from_line + 1)
         return Slice(from_line, to_line)
 
     def to_str(self, max_slices: int = -1) -> str:

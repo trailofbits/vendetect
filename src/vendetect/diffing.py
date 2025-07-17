@@ -200,3 +200,20 @@ class Differ:
                 collapse_identical_lines_threshold=collapse_identical_lines_threshold,
             )
         )
+
+
+def edit_distance(s1: str, s2: str) -> int:
+    """Calculates the minimum number of edits to convert s1 into s2"""
+    # HACK: insert a newline after every character, then use the Myers Diff algorithm since it's built into Python;
+    #       the result should be the same as Levenshtein distance!
+    newline = "\n"
+    s1 = f"{newline.join(s1)}\n"
+    s2 = f"{newline.join(s2)}\n"
+    return sum(1 for diff_line in ndiff(s1, s2) if diff_line[:2] in ("- ", "+ "))
+
+
+def normalized_edit_distance(s1: str, s2: str) -> float:
+    if s1 == s2:
+        return 0
+    ed = edit_distance(s1, s2)
+    return ed / max(len(s1), len(s2))

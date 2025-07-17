@@ -128,7 +128,7 @@ class DiffContext:
             self.rows.pop()
         yield from self.rows
         self.rows.clear()
-        yield CollapsedDiffLine(self.test_line, self.source_line, num_identical)
+        yield CollapsedDiffLine(self.test_line - num_identical, self.source_line - num_identical, num_identical)
 
 
 class Differ:

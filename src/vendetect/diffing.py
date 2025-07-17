@@ -203,9 +203,9 @@ class Differ:
 
 
 def edit_distance(s1: str, s2: str) -> int:
-    """Calculates the minimum number of edits to convert s1 into s2"""
-    # HACK: insert a newline after every character, then use the Myers Diff algorithm since it's built into Python;
-    #       the result should be the same as Levenshtein distance!
+    """Calculate the minimum number of edits to convert s1 into s2."""
+    # insert a newline after every character, then use the Myers Diff algorithm since it's built into Python;
+    # the result should be the same as Levenshtein distance!
     newline = "\n"
     s1 = f"{newline.join(s1)}\n"
     s2 = f"{newline.join(s2)}\n"

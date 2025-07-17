@@ -294,12 +294,11 @@ class File:
     @property
     def line_start_offsets(self) -> list[int]:
         if not self._line_start_offsets:
-            with self.repo:
-                with open(self.path, "r") as f:
-                    self._line_start_offsets.append(0)
-                    for line in f:
-                        self._line_start_offsets.append(self._line_start_offsets[-1] + len(line))
-                    self._line_start_offsets.pop()
+            with self.repo, self.path.open("r") as f:
+                self._line_start_offsets.append(0)
+                for line in f:
+                    self._line_start_offsets.append(self._line_start_offsets[-1] + len(line))
+                self._line_start_offsets.pop()
         return self._line_start_offsets
 
     def __hash__(self) -> int:
@@ -316,13 +315,12 @@ class File:
                 return self.__class__(self.path.readlink(), self.repo)
             return self
 
-    def get_line(self, byte_offset: int, rounding: Rounding = Rounding.DOWN, min_line: int = 0):
-        """Returns the zero-indexed line associated with byte offset `byte_offset`"""
+    def get_line(self, byte_offset: int, rounding: Rounding = Rounding.DOWN, min_line: int = 0) -> int:
+        """Return the zero-indexed line associated with byte offset `byte_offset`."""
         if byte_offset < 0:
-            with self.repo:
-                with open(self.path, "r") as f:
-                    f.seek(byte_offset, SEEK_END)
-                    byte_offset = f.tell()
+            with self.repo, self.path.open("r") as f:
+                f.seek(byte_offset, SEEK_END)
+                byte_offset = f.tell()
         if rounding == Rounding.DOWN:
             start = max(min_line, 0)
             while start + 1 < len(self.line_start_offsets) and self.line_start_offsets[start + 1] < byte_offset:

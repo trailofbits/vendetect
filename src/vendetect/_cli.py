@@ -146,12 +146,13 @@ def output_json(
     json.dump(results, output, indent=2)
 
 
-def output_rich(  # noqa: PLR0912 PLR0915 C901
+def output_rich(  # noqa: PLR0912 PLR0913 PLR0915 C901
     detections: Iterable[Detection],
     console: Console,
     min_similarity: float = 0.5,
     output_file: TextIO | None = None,
     collapse_identical_lines_threshold: int = 10,
+    edit_distance_threshold: float = 0.75,
 ) -> None:
     # If an output file is specified, create a new Console for it
     file_console = Console(file=output_file) if output_file else console
@@ -232,14 +233,16 @@ def output_rich(  # noqa: PLR0912 PLR0915 C901
                     else:
                         if diff_line.status == DiffLineStatus.COPIED:
                             status_col = Text("←", style="red reverse bold")
+                        # calculate the normalized edit distance
+                        elif (
+                            diff_line.left is not None
+                            and diff_line.right is not None
+                            and normalized_edit_distance(diff_line.left, diff_line.right) < edit_distance_threshold
+                        ):
+                            # the lines are at least 25% similar!
+                            status_col = Text("↜", style="yellow reverse")
                         else:
-                            # calculate the normalized edit distance
-                            if diff_line.left is not None and diff_line.right is not None and \
-                                    normalized_edit_distance(diff_line.left, diff_line.right) < 0.75:
-                                # the lines are at least 25% similar!
-                                status_col = Text("↜", style="yellow reverse")
-                            else:
-                                status_col = Text("✓", style="green reverse")
+                            status_col = Text("✓", style="green reverse")
                         if diff_line.left is None:
                             left: ConsoleRenderable = Text("")
                         else:

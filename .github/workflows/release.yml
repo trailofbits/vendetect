@@ -54,13 +54,14 @@ jobs:
     name: Publish Python distributions to PyPI
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: release
       url: https://pypi.org/p/vendetect
     needs: [build, generate-provenance]
     permissions:
       # Used to sign the release's artifacts with sigstore-python.
       # Used to publish to PyPI with Trusted Publishing.
-      id-token: write
+      id-token: write  # For trusted publishing + codesigning.
+      contents: write  # For attaching signing artifacts to the release.
     steps:
       - name: Download distributions
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0

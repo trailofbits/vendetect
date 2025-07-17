@@ -249,8 +249,24 @@ def output_rich(
 def main() -> None:  # noqa: C901, PLR0912, PLR0915
     parser = argparse.ArgumentParser(prog="vendetect")
 
-    parser.add_argument("TEST_REPO", type=str, help="path to the test repository")
-    parser.add_argument("SOURCE_REPO", type=str, help="path to the source repository")
+    parser.add_argument("TEST_REPO", type=str, help="path or URL to the test repository")
+    parser.add_argument("SOURCE_REPO", type=str, help="path or URL to the source repository")
+    parser.add_argument(
+        "--test-subdir",
+        "-ts",
+        type=str,
+        default=None,
+        help="relative path to the subdirectory in TEST_REPO in which to test (optional, for use when TEST_REPO is a "
+        "remote git repository URL)",
+    )
+    parser.add_argument(
+        "--source-subdir",
+        "-ss",
+        type=str,
+        default=None,
+        help="relative path to the subdirectory in SOURCE_REPO in which to test (optional, for use when SOURCE_REPO is "
+        "a remote git repository URL)",
+    )
     parser.add_argument(
         "--format",
         type=str,
@@ -348,8 +364,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
     try:
         with (
-            Repository.load(args.TEST_REPO) as test_repo,
-            Repository.load(args.SOURCE_REPO) as source_repo,
+            Repository.load(args.TEST_REPO, args.test_subdir) as test_repo,
+            Repository.load(args.SOURCE_REPO, args.source_subdir) as source_repo,
             RichStatus(console) as status,
         ):
             # Initialize detector with optimization options

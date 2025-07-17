@@ -152,7 +152,7 @@ def output_rich(
     console: Console,
     min_similarity: float = 0.5,
     output_file: TextIO | None = None,
-    collapse_identical_lines_threshold: int = 10
+    collapse_identical_lines_threshold: int = 10,
 ) -> None:
     # If an output file is specified, create a new Console for it
     file_console = Console(file=output_file) if output_file else console
@@ -207,26 +207,32 @@ def output_rich(
             test_lexer = get_lexer_for_filename(d.test.relative_path.name)
             source_lexer = get_lexer_for_filename(d.source.relative_path.name)
 
-            for (test_start_offset, test_end_offset), (source_start_offset, source_end_offset) \
-                    in zip(test_slices, source_slices, strict=False):
+            for (test_start_offset, test_end_offset), (source_start_offset, source_end_offset) in zip(
+                test_slices, source_slices, strict=False
+            ):
                 # Extract the content for the detected slices
 
                 # Convert character positions to line numbers
                 test_start = 0
-                while test_start + 1 < len(test_line_start_offsets) and \
-                        test_line_start_offsets[test_start + 1] < test_start_offset:
+                while (
+                    test_start + 1 < len(test_line_start_offsets)
+                    and test_line_start_offsets[test_start + 1] < test_start_offset
+                ):
                     test_start += 1
                 test_end = test_start + 1
-                while test_end < len(test_line_start_offsets) and \
-                        test_line_start_offsets[test_end] < test_end_offset:
+                while test_end < len(test_line_start_offsets) and test_line_start_offsets[test_end] < test_end_offset:
                     test_end += 1
                 source_start = 0
-                while source_start + 1 < len(source_line_start_offsets) and \
-                        source_line_start_offsets[source_start + 1] < source_start_offset:
+                while (
+                    source_start + 1 < len(source_line_start_offsets)
+                    and source_line_start_offsets[source_start + 1] < source_start_offset
+                ):
                     source_start += 1
                 source_end = source_start + 1
-                while source_end < len(source_line_start_offsets) and \
-                        source_line_start_offsets[source_end] < source_end_offset:
+                while (
+                    source_end < len(source_line_start_offsets)
+                    and source_line_start_offsets[source_end] < source_end_offset
+                ):
                     source_end += 1
 
                 test_slice_content = test_lines[max(0, test_start) : test_end]
@@ -240,23 +246,13 @@ def output_rich(
                 same_lines = 0
 
                 def add_test_row(code: str):
-                    test_rows.append(Syntax(
-                        code,
-                        lexer=test_lexer,
-                        line_numbers=True,
-                        start_line=test_line
-                    ))
+                    test_rows.append(Syntax(code, lexer=test_lexer, line_numbers=True, start_line=test_line))
                     if len(test_rows) < len(source_rows):
                         while len(diff_rows) < len(test_rows):
                             diff_rows.append(Text("✓", style="green reverse"))
 
                 def add_source_row(code: str):
-                    source_rows.append(Syntax(
-                        code,
-                        lexer=source_lexer,
-                        line_numbers=True,
-                        start_line=source_line
-                    ))
+                    source_rows.append(Syntax(code, lexer=source_lexer, line_numbers=True, start_line=source_line))
                     if len(source_rows) < len(test_rows):
                         while len(diff_rows) < len(source_rows):
                             diff_rows.append(Text("✓", style="green reverse"))
@@ -277,7 +273,6 @@ def output_rich(
                     diff_rows.append(Text("←", style="red reverse bold"))
                     diff_rows.append(Text("←", style="red reverse bold"))
                     diff_rows.append(Text("←", style="red reverse bold"))
-
 
                 for diff_line in ndiff(test_slice_content, source_slice_content):
                     if diff_line.startswith("  "):
@@ -308,8 +303,7 @@ def output_rich(
                 if first:
                     first = False
                 else:
-                    match_table.add_row(Text("  ⋮", style="dim"), Text("⋮", style="dim"),
-                                        Text("  ⋮", style="dim"))
+                    match_table.add_row(Text("  ⋮", style="dim"), Text("⋮", style="dim"), Text("  ⋮", style="dim"))
 
                 for c1, c2, c3 in zip_longest(test_rows, diff_rows, source_rows, fillvalue=Text("")):
                     match_table.add_row(c1, c2, c3)

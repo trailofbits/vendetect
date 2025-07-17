@@ -1,6 +1,6 @@
 from difflib import ndiff
 from enum import Enum
-from typing import Iterable, Iterator, Self
+from typing import Iterable, Iterator, Self  # noqa: UP035
 
 from .repo import File
 
@@ -8,6 +8,11 @@ from .repo import File
 class DiffLineStatus(Enum):
     COPIED = "COPIED"
     DIFFERENT = "DIFFERENT"
+
+
+class Rounding(Enum):
+    DOWN = "DOWN"
+    UP = "UP"
 
 
 class DiffLine:
@@ -50,20 +55,19 @@ class Document:
     def __getitem__(self, index: int | slice) -> str | tuple[str, ...]:
         return self.lines[index]
 
-    def get_line(self, byte_offset: int, round_down: bool = True, min_line: int = 0) -> int:
+    def get_line(self, byte_offset: int, rounding: Rounding = Rounding.DOWN, min_line: int = 0) -> int:
         if byte_offset < 0:
             byte_offset = self._line_start_offsets[-1] + len(self.lines[-1]) + byte_offset
-        if round_down:
+        if rounding == Rounding.DOWN:
             start = max(min_line, 0)
             while start + 1 < len(self._line_start_offsets) and self._line_start_offsets[start + 1] < byte_offset:
                 start += 1
             return start
-        else:
-            # round up
-            end = max(min_line, 0)
-            while end < len(self._line_start_offsets) and self._line_start_offsets[end] < byte_offset:
-                end += 1
-            return end
+        # round up
+        end = max(min_line, 0)
+        while end < len(self._line_start_offsets) and self._line_start_offsets[end] < byte_offset:
+            end += 1
+        return end
 
     @classmethod
     def from_str(cls, text: str) -> Self:
@@ -94,7 +98,7 @@ class DiffContext:
         self.test_line: int = 0
         self.source_line: int = 0
 
-    def add_test_row(self, code: str):
+    def add_test_row(self, code: str) -> None:
         insertion_point: DiffLine | None = None
         for line in reversed(self.rows):
             if line.left is not None:
@@ -108,7 +112,7 @@ class DiffContext:
         self.same_lines = 0
         self.test_line += 1
 
-    def add_source_row(self, code: str):
+    def add_source_row(self, code: str) -> None:
         insertion_point: DiffLine | None = None
         for line in reversed(self.rows):
             if line.right is not None:
@@ -128,29 +132,6 @@ class DiffContext:
         yield from self.rows
         self.rows.clear()
         yield CollapsedDiffLine(self.test_line, self.source_line, num_identical)
-
-    @classmethod
-    def from_offsets(
-        cls,
-        test: Document,
-        source: Document,
-        test_start_offset: int = 0,
-        test_end_offset: int = -1,
-        source_start_offset: int = 0,
-        source_end_offset: int = -1,
-        collapse_identical_lines_threshold: int = 10,
-    ) -> Self:
-        test_start = test.get_line(test_start_offset, round_down=True)
-        test_end = test.get_line(test_end_offset, round_down=False, min_line=test_start + 1)
-        source_start = source.get_line(source_start_offset, round_down=True)
-        source_end = source.get_line(source_end_offset, round_down=False, min_line=source_start + 1)
-        return cls(
-            test_start_line=test_start,
-            test_end_line=test_end,
-            source_start_line=source_start,
-            source_end_line=source_end,
-            collapse_identical_lines_threshold=collapse_identical_lines_threshold,
-        )
 
 
 class Differ:
@@ -200,3 +181,25 @@ class Differ:
             yield from context.add_identical_row(context.same_lines)
 
         yield from context.rows
+
+    def diff_from_offsets(
+        self,
+        test_start_offset: int = 0,
+        test_end_offset: int = -1,
+        source_start_offset: int = 0,
+        source_end_offset: int = -1,
+        collapse_identical_lines_threshold: int = 10,
+    ) -> Iterator[DiffLine]:
+        test_start = self.test.get_line(test_start_offset, rounding=Rounding.DOWN)
+        test_end = self.test.get_line(test_end_offset, rounding=Rounding.UP, min_line=test_start + 1)
+        source_start = self.source.get_line(source_start_offset, rounding=Rounding.DOWN)
+        source_end = self.source.get_line(source_end_offset, rounding=Rounding.UP, min_line=source_start + 1)
+        return self.diff(
+            DiffContext(
+                test_start_line=test_start,
+                test_end_line=test_end,
+                source_start_line=source_start,
+                source_end_line=source_end,
+                collapse_identical_lines_threshold=collapse_identical_lines_threshold,
+            )
+        )

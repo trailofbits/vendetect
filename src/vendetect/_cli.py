@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .detector import Detection, Status, VenDetector, get_lexer_for_filename
-from .diffing import CollapsedDiffLine, DiffContext, Differ, Document, DiffLineStatus
+from .diffing import CollapsedDiffLine, Differ, DiffLineStatus, Document
 from .errors import VendetectError
 from .repo import File, Repository
 
@@ -146,7 +146,7 @@ def output_json(
     json.dump(results, output, indent=2)
 
 
-def output_rich(
+def output_rich(  # noqa: PLR0912 PLR0915 C901
     detections: Iterable[Detection],
     console: Console,
     min_similarity: float = 0.5,
@@ -204,16 +204,12 @@ def output_rich(
                 else:
                     match_table.add_row(Text("  ⋮", style="dim"), Text("⋮", style="dim"), Text("  ⋮", style="dim"))
 
-                for diff_line in Differ(test=test_doc, source=source_doc).diff(
-                    context=DiffContext.from_offsets(
-                        test=test_doc,
-                        source=source_doc,
-                        test_start_offset=test_start_offset,
-                        test_end_offset=test_end_offset,
-                        source_start_offset=source_start_offset,
-                        source_end_offset=source_end_offset,
-                        collapse_identical_lines_threshold=collapse_identical_lines_threshold,
-                    )
+                for diff_line in Differ(test=test_doc, source=source_doc).diff_from_offsets(
+                    test_start_offset=test_start_offset,
+                    test_end_offset=test_end_offset,
+                    source_start_offset=source_start_offset,
+                    source_end_offset=source_end_offset,
+                    collapse_identical_lines_threshold=collapse_identical_lines_threshold,
                 ):
                     if isinstance(diff_line, CollapsedDiffLine):
                         test_msg = diff_line.left

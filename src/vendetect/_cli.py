@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from rich import traceback
-from rich.console import Console
+from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
@@ -235,13 +235,13 @@ def output_rich(  # noqa: PLR0912 PLR0915 C901
                         else:
                             status_col = Text("✓", style="green reverse")
                         if diff_line.left is None:
-                            left = Text("")
+                            left: ConsoleRenderable = Text("")
                         else:
                             left = Syntax(
                                 diff_line.left, lexer=test_lexer, line_numbers=True, start_line=diff_line.left_line
                             )
                         if diff_line.right is None:
-                            right = Text("")
+                            right: ConsoleRenderable = Text("")
                         else:
                             right = Syntax(
                                 diff_line.right, lexer=source_lexer, line_numbers=True, start_line=diff_line.right_line

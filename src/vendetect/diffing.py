@@ -17,9 +17,9 @@ class Rounding(Enum):
 
 class DiffLine:
     def __init__(self, left: str | None, status: DiffLineStatus, right: str | None, left_line: int, right_line: int):
-        self.left: str = left
+        self.left: str | None = left
         self.status: DiffLineStatus = status
-        self.right: str = right
+        self.right: str | None = right
         self.left_line: int = left_line
         self.right_line: int = right_line
 
@@ -29,6 +29,8 @@ class CollapsedDiffLine(DiffLine):
         self.left_start_line: int = left_start_line
         self.right_start_line: int = right_start_line
         self.num_identical_lines: int = num_identical_lines
+        self.left: str
+        self.right: str
         super().__init__(
             f"<{self.num_identical_lines} identical lines starting on line {self.left_start_line}>",
             DiffLineStatus.COPIED,

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TextIO
 
 from rich import traceback
-from rich.console import Console
+from rich.console import Console, ConsoleRenderable
 from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
@@ -17,6 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .detector import Detection, Status, VenDetector, get_lexer_for_filename
+from .diffing import CollapsedDiffLine, Differ, DiffLineStatus, Document
 from .errors import VendetectError
 from .repo import File, Repository
 
@@ -145,11 +146,12 @@ def output_json(
     json.dump(results, output, indent=2)
 
 
-def output_rich(
+def output_rich(  # noqa: PLR0912 PLR0915 C901
     detections: Iterable[Detection],
     console: Console,
     min_similarity: float = 0.5,
     output_file: TextIO | None = None,
+    collapse_identical_lines_threshold: int = 10,
 ) -> None:
     # If an output file is specified, create a new Console for it
     file_console = Console(file=output_file) if output_file else console
@@ -178,8 +180,8 @@ def output_rich(
                 return file.path.read_text()
 
         try:
-            test_content = read_file_content(d.test)
-            source_content = read_file_content(d.source)
+            test_doc = Document.from_file(d.test)
+            source_doc = Document.from_file(d.source)
 
             # Create a side-by-side view of the detected slices
             test_slices = d.comparison.slices1
@@ -187,41 +189,64 @@ def output_rich(
 
             match_table = Table()
             match_table.add_column(f"{d.test.relative_path.name!s}", style="cyan")
+            match_table.add_column(" ")
             match_table.add_column(f"{d.source.relative_path.name!s}", style="green")
             first = True
 
-            for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
-                # Extract the content for the detected slices
-                test_lines = test_content.splitlines()
-                source_lines = source_content.splitlines()
+            test_lexer = get_lexer_for_filename(d.test.relative_path.name)
+            source_lexer = get_lexer_for_filename(d.source.relative_path.name)
 
-                # Convert character positions to line numbers (approximate)
-                test_slice_content = "\n".join(test_lines[max(0, test_start - 10) : test_end + 10])
-                source_slice_content = "\n".join(source_lines[max(0, source_start - 10) : source_end + 10])
-
-                # Create syntax-highlighted code panels
-                test_syntax = Syntax(
-                    test_slice_content,
-                    lexer=get_lexer_for_filename(d.test.relative_path.name),
-                    line_numbers=True,
-                    start_line=max(1, test_start - 10),
-                    highlight_lines=set(range(max(1, test_start), test_end + 1)),
-                )
-
-                source_syntax = Syntax(
-                    source_slice_content,
-                    lexer=get_lexer_for_filename(d.source.relative_path.name),
-                    line_numbers=True,
-                    start_line=max(1, source_start - 10),
-                    highlight_lines=set(range(max(1, source_start), source_end + 1)),
-                )
-
+            for (test_start_offset, test_end_offset), (source_start_offset, source_end_offset) in zip(
+                test_slices, source_slices, strict=False
+            ):
                 if first:
                     first = False
                 else:
-                    match_table.add_row(Text("  ⋮", style="dim"), Text("  ⋮", style="dim"))
+                    match_table.add_row(Text("  ⋮", style="dim"), Text("⋮", style="dim"), Text("  ⋮", style="dim"))
 
-                match_table.add_row(test_syntax, source_syntax)
+                for diff_line in Differ(test=test_doc, source=source_doc).diff_from_offsets(
+                    test_start_offset=test_start_offset,
+                    test_end_offset=test_end_offset,
+                    source_start_offset=source_start_offset,
+                    source_end_offset=source_end_offset,
+                    collapse_identical_lines_threshold=collapse_identical_lines_threshold,
+                ):
+                    if isinstance(diff_line, CollapsedDiffLine):
+                        test_msg = diff_line.left
+                        source_msg = diff_line.right
+                        match_table.add_row(
+                            Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
+                            Text("←", style="red reverse bold"),
+                            Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
+                        )
+                        match_table.add_row(
+                            Text(f"        {test_msg}", style="red reverse bold"),
+                            Text("←", style="red reverse bold"),
+                            Text(f"        {source_msg}", style="red reverse bold"),
+                        )
+                        match_table.add_row(
+                            Text(f"        {' ' * (len(test_msg) // 2)}⋮", "red reverse bold"),
+                            Text("←", style="red reverse bold"),
+                            Text(f"        {' ' * (len(source_msg) // 2)}⋮", "red reverse bold"),
+                        )
+                    else:
+                        if diff_line.status == DiffLineStatus.COPIED:
+                            status_col = Text("←", style="red reverse bold")
+                        else:
+                            status_col = Text("✓", style="green reverse")
+                        if diff_line.left is None:
+                            left: ConsoleRenderable = Text("")
+                        else:
+                            left = Syntax(
+                                diff_line.left, lexer=test_lexer, line_numbers=True, start_line=diff_line.left_line
+                            )
+                        if diff_line.right is None:
+                            right: ConsoleRenderable = Text("")
+                        else:
+                            right = Syntax(
+                                diff_line.right, lexer=source_lexer, line_numbers=True, start_line=diff_line.right_line
+                            )
+                        match_table.add_row(left, status_col, right)
 
             if not first:
                 context_panel = Panel.fit(

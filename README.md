@@ -213,7 +213,7 @@ mypy
 If you'd like to file a bug report or feature request, please use our
 [issues](https://github.com/trailofbits/deptective/issues) page.
 Feel free to contact us or reach out in
-[Empire Hacking](https://slack.empirehacking.nyc/) for help using or extending Deptective.
+[Empire Hacking](https://slack.empirehacking.nyc/) for help using or extending Vendetect.
 
 ## License 📝
 

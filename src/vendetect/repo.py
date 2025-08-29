@@ -345,7 +345,7 @@ class RepositoryCommit(_ClonedRepository):
             repo = repo.root
         self.repo: Repository = repo
         self.rev = commit
-        super().__init__(str(repo.root_path), rev=commit)
+        super().__init__(str(repo.root_path), rev=repo.rev if repo.rev else None)
 
     def _ancestors(self) -> list[Repository]:
         stack: list[Repository] = [self]

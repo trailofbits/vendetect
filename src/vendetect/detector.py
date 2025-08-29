@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import wraps
 from heapq import heappop, heappush
 from logging import getLogger
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from pygments import lexer, lexers
 from pygments.util import ClassNotFound
@@ -13,6 +13,9 @@ from pygments.util import ClassNotFound
 from .comparison import Comparator, Comparison, Slice
 from .copydetect import CopyDetectComparator
 from .repo import File, Repository, Rounding
+
+if TYPE_CHECKING:
+    from .metrics import ComparisonMetric
 
 log = getLogger(__name__)
 F = TypeVar("F")
@@ -93,8 +96,11 @@ class Detection:
     test: File
     source: File
     comparison: Comparison
+    metric: "ComparisonMetric | None" = None
 
     def __lt__(self, other: "Detection") -> bool:
+        if self.metric is not None:
+            return self.metric.score(self.comparison) > self.metric.score(other.comparison)
         return self.comparison < other.comparison
 
     @property
@@ -119,6 +125,7 @@ class VenDetector:
         max_history_depth: int | None = None,
         *,
         incremental: bool = False,
+        metric: "ComparisonMetric | None" = None,
     ):
         if comparator is None:
             comparator = CopyDetectComparator()
@@ -133,6 +140,7 @@ class VenDetector:
             max_history_depth if max_history_depth is not None and max_history_depth >= 0 else None
         )  # Limit history traversal depth
         self._fingerprint_cache: dict[File, F] = {}  # Cache fingerprints
+        self.metric = metric  # Custom comparison metric
 
     @staticmethod
     def callback(func: Callable) -> Callable:
@@ -224,7 +232,7 @@ class VenDetector:
                             continue
 
                         cmp = self.comparator.compare(fp1, fp2)  # type: ignore
-                        d = Detection(test_file, source_file, cmp)
+                        d = Detection(test_file, source_file, cmp, metric=self.metric)
                         heappush(detections, d)
 
                 # Process accumulated detections for this batch

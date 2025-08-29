@@ -196,14 +196,14 @@ class VenDetector:
                             "Ignoring %s because we do not have a lexer for its filetype",
                             str(file),
                         )
-                        skipped_filetypes.add(file.path.suffix)
+                        skipped_filetypes.add(file.path.suffix)  # type: ignore
                     else:
                         lst.append(file)
 
             if skipped_filetypes:
                 if "" in skipped_filetypes:
                     skipped_filetypes.remove("")
-                    skipped_filetypes.add("[No Suffix]")
+                    skipped_filetypes.add("[No Suffix]")  # type: ignore
                 skipped_filetypes = sorted(skipped_filetypes)
                 if len(skipped_filetypes) == 1:
                     suffix = f"suffix {skipped_filetypes[0]}"

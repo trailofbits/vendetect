@@ -173,7 +173,7 @@ class VenDetector:
             return None, False
 
     @callback
-    def compare(  # noqa: C901, PLR0912
+    def compare(  # noqa: C901, PLR0912, PLR0915
         self, test_files: Iterable[File], source_files: Iterable[File]
     ) -> Iterator[Detection]:
         test_files: list[File] = list(test_files)
@@ -186,16 +186,36 @@ class VenDetector:
             tf: list[File] = []
             sf: list[File] = []
 
+            skipped_filetypes: set[str] | list[str] = set()
+
             # Apply file filtering based on lexer availability
             for lst, files in ((tf, test_files), (sf, source_files)):
                 for file in files:
                     if get_lexer_for_filename(file.path.name) is None:
-                        log.warning(
+                        log.debug(
                             "Ignoring %s because we do not have a lexer for its filetype",
                             str(file),
                         )
+                        skipped_filetypes.add(file.path.suffix)  # type: ignore
                     else:
                         lst.append(file)
+
+            if skipped_filetypes:
+                if "" in skipped_filetypes:
+                    skipped_filetypes.remove("")
+                    skipped_filetypes.add("[No Suffix]")  # type: ignore
+                skipped_filetypes = sorted(skipped_filetypes)
+                if len(skipped_filetypes) == 1:
+                    suffix = f"suffix {skipped_filetypes[0]}"
+                elif len(skipped_filetypes) == 2:  # noqa: PLR2004
+                    suffix = f"suffixes {skipped_filetypes[0]} and {skipped_filetypes[1]}"
+                else:
+                    suffix = f"suffixes {', '.join(skipped_filetypes[:-1])}, and {skipped_filetypes[-1]}"
+                log.warning(
+                    "Ignored files with %s because we do not have a lexer for their filetypes; "
+                    "see the debug log for a list of skipped file paths",
+                    suffix,
+                )
 
             test_files = tf
             source_files = sf

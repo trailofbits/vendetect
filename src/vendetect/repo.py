@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum
@@ -381,11 +382,22 @@ class RepositoryCommit(_ClonedRepository):
                 else:
                     msg = f"{self.root!s} does not have commit {self.rev} fetched"
                 raise RepositoryError(msg)
-            subprocess.check_call(  # noqa: S603
-                [GIT_PATH, "checkout", self.rev],  # type: ignore
-                cwd=self.root_path,
-                stderr=subprocess.DEVNULL,
-            )
+            with tempfile.NamedTemporaryFile() as stdout:
+                try:
+                    subprocess.check_call(  # noqa: S603
+                        [GIT_PATH, "checkout", self.rev],  # type: ignore
+                        cwd=self.root_path,
+                        stdout=stdout,
+                        stderr=stdout,
+                    )
+                except subprocess.CalledProcessError as e:
+                    stdout.flush()
+                    stdout.seek(0)
+                    msg = (
+                        f"`cd {self.root_path!s}; git checkout {self.rev}` exited with code {e.returncode}, outputting "
+                        f"{stdout.read()!r}"
+                    )
+                    raise RepositoryError(msg) from e
         return ret
 
     def __enter__(self) -> Self:

@@ -8,7 +8,7 @@ from functools import wraps
 from logging import getLogger
 from os import SEEK_END
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import TemporaryDirectory
 from typing import Optional, ParamSpec, Self, TypeVar
 from urllib.parse import urlparse
 
@@ -393,9 +393,11 @@ class RepositoryCommit(_ClonedRepository):
                 except subprocess.CalledProcessError as e:
                     stdout.flush()
                     stdout.seek(0)
-                    msg = (f"`cd {self.root_path!s}; git checkout {self.rev}` exited with code {e.returncode}, outputting "
-                           f"{stdout.read()!r}")
-                    raise RepositoryError(msg)
+                    msg = (
+                        f"`cd {self.root_path!s}; git checkout {self.rev}` exited with code {e.returncode}, outputting "
+                        f"{stdout.read()!r}"
+                    )
+                    raise RepositoryError(msg) from e
         return ret
 
     def __enter__(self) -> Self:

@@ -173,7 +173,7 @@ class VenDetector:
             return None, False
 
     @callback
-    def compare(  # noqa: C901, PLR0912
+    def compare(  # noqa: C901, PLR0912, PLR0915
         self, test_files: Iterable[File], source_files: Iterable[File]
     ) -> Iterator[Detection]:
         test_files: list[File] = list(test_files)
@@ -207,12 +207,15 @@ class VenDetector:
                 skipped_filetypes = sorted(skipped_filetypes)
                 if len(skipped_filetypes) == 1:
                     suffix = f"suffix {skipped_filetypes[0]}"
-                elif len(skipped_filetypes) == 2:
+                elif len(skipped_filetypes) == 2:  # noqa: PLR2004
                     suffix = f"suffixes {skipped_filetypes[0]} and {skipped_filetypes[1]}"
                 else:
                     suffix = f"suffixes {', '.join(skipped_filetypes[:-1])}, and {skipped_filetypes[-1]}"
-                log.warning("Ignored files with %s because we do not have a lexer for their filetypes; "
-                            "see the debug log for a list of skipped file paths", suffix)
+                log.warning(
+                    "Ignored files with %s because we do not have a lexer for their filetypes; "
+                    "see the debug log for a list of skipped file paths",
+                    suffix,
+                )
 
             test_files = tf
             source_files = sf

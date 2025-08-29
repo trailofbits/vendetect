@@ -5,7 +5,10 @@ import logging
 import sys
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TextIO
+from typing import TYPE_CHECKING, TextIO
+
+if TYPE_CHECKING:
+    from .metrics import ComparisonMetric
 
 from rich import traceback
 from rich.console import Console, ConsoleRenderable
@@ -19,6 +22,7 @@ from rich.text import Text
 from .detector import Detection, Status, VenDetector, get_lexer_for_filename
 from .diffing import CollapsedDiffLine, Differ, DiffLineStatus, Document, normalized_edit_distance
 from .errors import VendetectError
+from .metrics import get_metric
 from .repo import File, Repository
 
 logger = logging.getLogger(__name__)
@@ -59,10 +63,16 @@ class RichStatus(Status):
             )
 
 
-def output_csv(detections: Iterable[Detection], min_similarity: float = 0.5, output_file: TextIO | None = None) -> None:
+def output_csv(
+    detections: Iterable[Detection],
+    min_similarity: float = 0.5,
+    output_file: TextIO | None = None,
+    metric: "ComparisonMetric | None" = None,
+) -> None:
     output = output_file if output_file else sys.stdout
     csv_writer = csv.writer(output)
-    # Write header
+    # Write header - use "Token Overlap" for token_overlap metric
+    header_name = "Token Overlap" if metric and metric.name() == "token_overlap" else "Similarity"
     csv_writer.writerow(
         [
             "Test File",
@@ -71,22 +81,36 @@ def output_csv(detections: Iterable[Detection], min_similarity: float = 0.5, out
             "Test Slice End",
             "Source Slice Start",
             "Source Slice End",
-            "Similarity",
+            header_name,
         ]
     )
 
     for d in detections:
-        # Calculate overall similarity (average of both similarities)
-        avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
-
-        if avg_similarity < min_similarity:
-            break
+        # Calculate overall similarity (use metric if provided, otherwise average)
+        if metric is not None:
+            similarity_score = metric.score(d.comparison)
+            # For token_overlap, interpret min_similarity as minimum token count
+            if metric.name() == "token_overlap":
+                if similarity_score < min_similarity:
+                    continue  # Skip this detection if below threshold
+            elif similarity_score < min_similarity:
+                break  # For other metrics, stop iteration
+        else:
+            similarity_score = (d.comparison.similarity1 + d.comparison.similarity2) / 2
+            if similarity_score < min_similarity:
+                break
 
         # Get slices
         test_slices = d.comparison.slices1
         source_slices = d.comparison.slices2
 
         for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
+            # Format the score appropriately
+            if metric and metric.name() == "token_overlap":
+                score_str = str(int(similarity_score))
+            else:
+                score_str = f"{similarity_score:.4f}"
+
             # Write one row per matched slice
             csv_writer.writerow(
                 [
@@ -96,23 +120,34 @@ def output_csv(detections: Iterable[Detection], min_similarity: float = 0.5, out
                     test_end,
                     source_start,
                     source_end,
-                    f"{avg_similarity:.4f}",
+                    score_str,
                 ]
             )
 
 
 def output_json(
-    detections: Iterable[Detection], min_similarity: float = 0.5, output_file: TextIO | None = None
+    detections: Iterable[Detection],
+    min_similarity: float = 0.5,
+    output_file: TextIO | None = None,
+    metric: "ComparisonMetric | None" = None,
 ) -> None:
     results = []
     output = output_file if output_file else sys.stdout
 
     for d in detections:
-        # Calculate overall similarity (average of both similarities)
-        avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
-
-        if avg_similarity < min_similarity:
-            break
+        # Calculate overall similarity (use metric if provided, otherwise average)
+        if metric is not None:
+            similarity_score = metric.score(d.comparison)
+            # For token_overlap, interpret min_similarity as minimum token count
+            if metric.name() == "token_overlap":
+                if similarity_score < min_similarity:
+                    continue  # Skip this detection if below threshold
+            elif similarity_score < min_similarity:
+                break  # For other metrics, stop iteration
+        else:
+            similarity_score = (d.comparison.similarity1 + d.comparison.similarity2) / 2
+            if similarity_score < min_similarity:
+                break
 
         # Get slices
         test_slices = d.comparison.slices1
@@ -130,15 +165,25 @@ def output_json(
                 }
             )
 
-        # Create detection data
-        detection_data = {
-            "test_file": f"{d.test.relative_path!s}",
-            "source_file": f"{d.source.relative_path!s}",
-            "similarity": round(avg_similarity, 4),
-            "similarity_test": round(d.comparison.similarity1, 4),
-            "similarity_source": round(d.comparison.similarity2, 4),
-            "slices": slices_data,
-        }
+        # Create detection data - use appropriate field name and value for token_overlap
+        if metric and metric.name() == "token_overlap":
+            detection_data = {
+                "test_file": f"{d.test.relative_path!s}",
+                "source_file": f"{d.source.relative_path!s}",
+                "token_overlap": int(similarity_score),
+                "similarity_test": round(d.comparison.similarity1, 4),
+                "similarity_source": round(d.comparison.similarity2, 4),
+                "slices": slices_data,
+            }
+        else:
+            detection_data = {
+                "test_file": f"{d.test.relative_path!s}",
+                "source_file": f"{d.source.relative_path!s}",
+                "similarity": round(similarity_score, 4),
+                "similarity_test": round(d.comparison.similarity1, 4),
+                "similarity_source": round(d.comparison.similarity2, 4),
+                "slices": slices_data,
+            }
 
         results.append(detection_data)
 
@@ -321,7 +366,15 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         "--min-similarity",
         type=float,
         default=0.5,
-        help="the minimum similarity threshold to output a match (range: 0.0-1.0, default: 0.5)",
+        help="minimum threshold to output a match (range: 0.0-1.0 for similarity metrics, "
+        "or minimum token count for token_overlap metric, default: 0.5)",
+    )
+    parser.add_argument(
+        "--metric",
+        type=str,
+        default="sum",
+        choices=["sum", "average", "min", "max", "token_overlap", "weighted"],
+        help="comparison metric to use for ranking detections (default: sum)",
     )
 
     # Performance optimization options
@@ -402,12 +455,16 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             Repository.load(args.SOURCE_REPO, args.source_subdir) as source_repo,
             RichStatus(console) as status,
         ):
+            # Get the comparison metric
+            metric = get_metric(args.metric)
+
             # Initialize detector with optimization options
             vend = VenDetector(
                 status=status,
                 incremental=args.incremental,
                 batch_size=args.batch_size,
                 max_history_depth=args.max_history_depth,
+                metric=metric,
             )
 
             # Get detections
@@ -430,9 +487,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
             # Output based on format
             if args.format == "csv":
-                output_csv(detections, args.min_similarity, output_file)
+                output_csv(detections, args.min_similarity, output_file, metric)
             elif args.format == "json":
-                output_json(detections, args.min_similarity, output_file)
+                output_json(detections, args.min_similarity, output_file, metric)
             else:  # rich format
                 output_rich(detections, console, args.min_similarity, output_file)
     except VendetectError as e:

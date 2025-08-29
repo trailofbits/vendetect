@@ -117,7 +117,7 @@ class Detection:
 
 
 class VenDetector:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         comparator: Comparator[F] | None = None,
         status: Status | None = None,

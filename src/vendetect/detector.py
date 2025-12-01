@@ -121,8 +121,8 @@ class VenDetector:
         incremental: bool = False,
     ):
         if comparator is None:
-            comparator = CopyDetectComparator()
-        self.comparator: Comparator[F] = comparator
+            comparator = CopyDetectComparator()  # type: ignore[assignment]
+        self.comparator: Comparator[F] = comparator  # type: ignore[type-var]
         if status is None:
             self.status: Status = Status()
         else:
@@ -132,7 +132,7 @@ class VenDetector:
         self.max_history_depth = (
             max_history_depth if max_history_depth is not None and max_history_depth >= 0 else None
         )  # Limit history traversal depth
-        self._fingerprint_cache: dict[File, F] = {}  # Cache fingerprints
+        self._fingerprint_cache: dict[File, F] = {}  # type: ignore[type-var]
 
     @staticmethod
     def callback(func: Callable) -> Callable:
@@ -176,11 +176,11 @@ class VenDetector:
     def compare(  # noqa: C901, PLR0912, PLR0915
         self, test_files: Iterable[File], source_files: Iterable[File]
     ) -> Iterator[Detection]:
-        test_files: list[File] = list(test_files)
-        source_files: list[File] = list(source_files)
+        test_files_lst: list[File] = list(test_files)
+        source_files_lst: list[File] = list(source_files)
 
         with ExitStack() as stack:
-            for repo in {f.repo for f in test_files} | {f.repo for f in source_files}:
+            for repo in {f.repo for f in test_files_lst} | {f.repo for f in source_files_lst}:
                 stack.enter_context(repo)
 
             tf: list[File] = []
@@ -189,7 +189,7 @@ class VenDetector:
             skipped_filetypes: set[str] | list[str] = set()
 
             # Apply file filtering based on lexer availability
-            for lst, files in ((tf, test_files), (sf, source_files)):
+            for lst, files in ((tf, test_files_lst), (sf, source_files_lst)):
                 for file in files:
                     if get_lexer_for_filename(file.path.name) is None:
                         log.debug(
@@ -217,17 +217,17 @@ class VenDetector:
                     suffix,
                 )
 
-            test_files = tf
-            source_files = sf
+            test_files_lst = tf
+            source_files_lst = sf
 
-            self.status.update_num_comparisons(len(test_files) * len(source_files))
+            self.status.update_num_comparisons(len(test_files_lst) * len(source_files_lst))
 
             explored_sources: set[Source] = set()
             detections: list[Detection] = []
 
             # Process files in batches to allow incremental result reporting
-            for i in range(0, len(test_files), self.batch_size):
-                batch_test_files = test_files[i : i + self.batch_size]
+            for i in range(0, len(test_files_lst), self.batch_size):
+                batch_test_files = test_files_lst[i : i + self.batch_size]
 
                 for test_file in batch_test_files:
                     self.status.update_compare_progress(test_file)
@@ -236,7 +236,7 @@ class VenDetector:
                     if fp1 is None:
                         continue
 
-                    for source_file in source_files:
+                    for source_file in source_files_lst:
                         self.status.update_compare_progress()
 
                         fp2, _ = self._get_fingerprint(source_file)

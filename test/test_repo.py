@@ -37,6 +37,6 @@ class TestRepo(TestCase):
                 if repo is None:
                     break
                 prev = repo
-        self.assertIsNotNone(prev)
+        assert prev is not None
         self.assertIsNone(prev.previous_version(Path("./README.md")))
         self.assertEqual("16385f50f79fe3aa44b6a8e4ef131626be700b38", prev.rev)

@@ -245,13 +245,13 @@ def output_rich(  # noqa: PLR0912 PLR0913 PLR0915 C901
                             status_col = Text("✓", style="green reverse")
                         if diff_line.left is None:
                             left: ConsoleRenderable = Text("")
-                        else:
+                        elif test_lexer is not None:
                             left = Syntax(
                                 diff_line.left, lexer=test_lexer, line_numbers=True, start_line=diff_line.left_line
                             )
                         if diff_line.right is None:
                             right: ConsoleRenderable = Text("")
-                        else:
+                        elif source_lexer is not None:
                             right = Syntax(
                                 diff_line.right, lexer=source_lexer, line_numbers=True, start_line=diff_line.right_line
                             )

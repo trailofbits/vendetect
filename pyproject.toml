@@ -28,10 +28,7 @@ lint = [
     # NOTE: ruff is under active development, so we pin conservatively here
     # and let Dependabot periodically perform this update.
     "ruff ~= 0.12.3",
-    "pyright ~= 1.1",
-    "types-html5lib",
-    "types-requests",
-    "types-toml",
+    "ty",
 ]
 dev = [
     {include-group = "doc"},
@@ -51,14 +48,6 @@ Source = "https://github.com/trailofbits/vendetect"
 [tool.coverage.run]
 # don't attempt code coverage for the CLI entrypoints
 omit = ["src/vendetect/_cli.py"]
-
-[tool.pyright]
-include = ["src", "test"]
-exclude = []
-reportUnusedImport = "warning"
-reportUnusedVariable = "warning"
-reportGeneralTypeIssues = "error"
-typeCheckingMode = "basic"
 
 [tool.ruff]
 line-length = 120

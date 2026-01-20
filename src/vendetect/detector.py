@@ -1,21 +1,26 @@
+from __future__ import annotations
+
 import types
-from collections.abc import Callable, Iterable, Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import wraps
 from heapq import heappop, heappush
 from logging import getLogger
-from typing import TypeVar
+from typing import TYPE_CHECKING, Generic
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Iterator
 
 from pygments import lexer, lexers
 from pygments.util import ClassNotFound
+from typing_extensions import TypeVar
 
 from .comparison import Comparator, Comparison, Slice
-from .copydetect import CopyDetectComparator
+from .copydetect import CodeFingerprint, CopyDetectComparator
 from .repo import File, Repository, Rounding
 
 log = getLogger(__name__)
-F = TypeVar("F")
+F = TypeVar("F", default=CodeFingerprint)
 
 
 def get_lexer_for_filename(filename: str) -> lexer.Lexer | None:
@@ -53,7 +58,7 @@ class Source:  # noqa: PLW1641 to fix a false-positive from ruff
             return False
         return self.file == other.file and self.source_slices == other.source_slices
 
-    def __lt__(self, other: "Source") -> bool:
+    def __lt__(self, other: Source) -> bool:
         return self.file.relative_path < other.file.relative_path or (
             self.file == other.file and self.source_slices < other.source_slices
         )
@@ -94,7 +99,7 @@ class Detection:
     source: File
     comparison: Comparison
 
-    def __lt__(self, other: "Detection") -> bool:
+    def __lt__(self, other: Detection) -> bool:
         return self.comparison < other.comparison
 
     @property
@@ -110,7 +115,7 @@ class Detection:
         return self.source.repo
 
 
-class VenDetector:
+class VenDetector(Generic[F]):
     def __init__(
         self,
         comparator: Comparator[F] | None = None,
@@ -121,8 +126,9 @@ class VenDetector:
         incremental: bool = False,
     ):
         if comparator is None:
-            comparator = CopyDetectComparator()  # type: ignore[assignment]
-        self.comparator: Comparator[F] = comparator  # type: ignore[type-var]
+            self.comparator: Comparator[F] = CopyDetectComparator()
+        else:
+            self.comparator = comparator
         if status is None:
             self.status: Status = Status()
         else:
@@ -132,12 +138,12 @@ class VenDetector:
         self.max_history_depth = (
             max_history_depth if max_history_depth is not None and max_history_depth >= 0 else None
         )  # Limit history traversal depth
-        self._fingerprint_cache: dict[File, F] = {}  # type: ignore[type-var]
+        self._fingerprint_cache: dict[File, F] = {}
 
     @staticmethod
-    def callback(func: Callable) -> Callable:
+    def callback(func: types.FunctionType) -> Callable:
         @wraps(func)
-        def wrapper(self: "VenDetector", *args: tuple, **kwargs: dict) -> Iterator | object:
+        def wrapper(self: VenDetector, *args: tuple, **kwargs: dict) -> Iterator | object:
             if not hasattr(self.status, f"on_{func.__name__}"):
                 msg = (
                     f"{self.status.__class__.__name__}.on_{func.__name__} is not defined; required "
@@ -155,11 +161,11 @@ class VenDetector:
             if hasattr(self.status, f"{func.__name__}_completed"):
                 getattr(self.status, f"{func.__name__}_completed")(*modified_args, **kwargs)
             if not is_generator:
-                return ret  # type: ignore
+                return ret
 
         return wrapper
 
-    def _get_fingerprint(self, file: File) -> tuple[object, bool]:
+    def _get_fingerprint(self, file: File) -> tuple[F | None, bool]:
         """Get fingerprint from cache or compute it, returning tuple of (fingerprint, is_cached)."""
         if file in self._fingerprint_cache:
             return self._fingerprint_cache[file], True
@@ -196,14 +202,14 @@ class VenDetector:
                             "Ignoring %s because we do not have a lexer for its filetype",
                             str(file),
                         )
-                        skipped_filetypes.add(file.path.suffix)  # type: ignore
+                        skipped_filetypes.add(file.path.suffix)
                     else:
                         lst.append(file)
 
             if skipped_filetypes:
                 if "" in skipped_filetypes:
                     skipped_filetypes.remove("")
-                    skipped_filetypes.add("[No Suffix]")  # type: ignore
+                    skipped_filetypes.add("[No Suffix]")
                 skipped_filetypes = sorted(skipped_filetypes)
                 if len(skipped_filetypes) == 1:
                     suffix = f"suffix {skipped_filetypes[0]}"
@@ -243,7 +249,7 @@ class VenDetector:
                         if fp2 is None:
                             continue
 
-                        cmp = self.comparator.compare(fp1, fp2)  # type: ignore
+                        cmp = self.comparator.compare(fp1, fp2)
                         d = Detection(test_file, source_file, cmp)
                         heappush(detections, d)
 

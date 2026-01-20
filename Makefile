@@ -31,7 +31,7 @@ lint:
 	uv sync --group lint
 	uv run ruff format --check && \
 		uv run ruff check && \
-		uv run pyright
+		uv run ty check
 
 .PHONY: format
 format:

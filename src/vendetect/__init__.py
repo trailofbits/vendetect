@@ -1,3 +1,5 @@
 """The `vendetect` APIs."""
 
-__version__ = "0.0.3"
+import importlib.metadata
+
+__version__ = importlib.metadata.version("vendetect")

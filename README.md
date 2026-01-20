@@ -193,19 +193,13 @@ Contributions are welcome! Check out the [issues](https://github.com/trailofbits
 
 ```bash
 # Install development dependencies
-uv sync --group dev
+make dev
 
 # Source virtual env
-source .venv/bin/activate
+make test
 
-# Run tests
-pytest
-
-# Lint code
-ruff check
-
-# Type checking
-mypy
+# Lint code & Type checking
+make lint
 ```
 
 ## Contact 💬

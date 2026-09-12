@@ -5,6 +5,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import wraps
 from heapq import heappop, heappush
+from itertools import count
 from logging import getLogger
 from typing import TYPE_CHECKING, Generic, cast
 
@@ -17,7 +18,11 @@ from typing_extensions import TypeVar
 
 from .comparison import Comparator, Comparison, Slice
 from .copydetect import CodeFingerprint, CopyDetectComparator
+from .metrics import DEFAULT_METRIC, get_metric
 from .repo import File, Repository, Rounding
+
+if TYPE_CHECKING:
+    from .metrics import ComparisonMetric
 
 log = getLogger(__name__)
 F = TypeVar("F", default=CodeFingerprint)
@@ -99,9 +104,6 @@ class Detection:
     source: File
     comparison: Comparison
 
-    def __lt__(self, other: Detection) -> bool:
-        return self.comparison < other.comparison
-
     @property
     def test_source(self) -> Source:
         return Source(self.test, self.comparison.slices1)
@@ -116,7 +118,7 @@ class Detection:
 
 
 class VenDetector(Generic[F]):
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         comparator: Comparator[F] | None = None,
         status: Status | None = None,
@@ -124,6 +126,7 @@ class VenDetector(Generic[F]):
         max_history_depth: int | None = None,
         *,
         incremental: bool = False,
+        metric: ComparisonMetric | None = None,
     ):
         if comparator is None:
             # `CopyDetectComparator` is a `Comparator[CodeFingerprint]`, and `F` defaults to
@@ -141,6 +144,7 @@ class VenDetector(Generic[F]):
             max_history_depth if max_history_depth is not None and max_history_depth >= 0 else None
         )  # Limit history traversal depth
         self._fingerprint_cache: dict[File, F] = {}
+        self.metric: ComparisonMetric = metric if metric is not None else get_metric(DEFAULT_METRIC)
 
     @staticmethod
     def callback(func: types.FunctionType) -> Callable:
@@ -231,7 +235,8 @@ class VenDetector(Generic[F]):
             self.status.update_num_comparisons(len(test_files_lst) * len(source_files_lst))
 
             explored_sources: set[Source] = set()
-            detections: list[Detection] = []
+            detections: list[tuple[float, int, Detection]] = []
+            tiebreak = count()
 
             # Process files in batches to allow incremental result reporting
             for i in range(0, len(test_files_lst), self.batch_size):
@@ -253,14 +258,16 @@ class VenDetector(Generic[F]):
 
                         cmp = self.comparator.compare(fp1, fp2)
                         d = Detection(test_file, source_file, cmp)
-                        heappush(detections, d)
+                        # Negate so that the min-heap pops the best match first, and break
+                        # ties on insertion order so `Detection` itself never needs ordering.
+                        heappush(detections, (-self.metric.score(cmp), next(tiebreak), d))
 
                 # Process accumulated detections for this batch
                 if self.incremental and detections:
                     # Process detections incrementally
                     processed_batch = []
                     while detections:
-                        d = heappop(detections)
+                        _, _, d = heappop(detections)
                         if d.test_source in explored_sources:
                             # Skip if already found with better similarity
                             continue
@@ -275,7 +282,7 @@ class VenDetector(Generic[F]):
             # Process remaining detections if not in incremental mode
             if not self.incremental:
                 while detections:
-                    d = heappop(detections)
+                    _, _, d = heappop(detections)
                     if d.test_source in explored_sources:
                         continue
                     yield d
@@ -310,7 +317,7 @@ class VenDetector(Generic[F]):
             if history:
                 new_detections = tuple(self.compare((detection.test,), (detection.source,)))
                 if new_detections:
-                    best = min(best, *new_detections)
+                    best = max([best, *new_detections], key=lambda d: self.metric.score(d.comparison))
 
             pv = test_repo.previous_version(detection.test.relative_path)
             spv = source_repo.previous_version(detection.source.relative_path)

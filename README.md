@@ -85,7 +85,7 @@ vendetect /path/to/my/project https://github.com/example/repo.git \
 # Filter by file types and adjust similarity threshold
 vendetect /path/to/my/project /path/to/another/project \
   --type py --type js \
-  --min-similarity 0.8
+  --min-score 0.8
 ```
 
 ### Options
@@ -95,7 +95,10 @@ vendetect /path/to/my/project /path/to/another/project \
 --output OUTPUT              Output file path (default: stdout)
 --force                      Force overwrite of existing output file
 --type FILE_TYPES, -t        File extension to consider (can be used multiple times)
---min-similarity THRESHOLD   Minimum similarity threshold (range: 0.0-1.0, default: 0.5)
+--metric METRIC              Metric used to rank and filter detections: average, max,
+                             min, sum, or token_overlap (default: average)
+--min-score SCORE            Minimum score to report a match, in the units of the
+                             selected --metric (default: the metric's own default)
 --test-subdir DIR, -ts       Subdirectory within TEST_REPO to analyze
 --source-subdir DIR, -ss     Subdirectory within SOURCE_REPO to analyze
 --incremental                Enable incremental result reporting
@@ -137,15 +140,37 @@ vendetect /path/to/my/project /path/to/another/project --type py
 vendetect /path/to/my/project /path/to/another/project --type py --type js --type ts
 ```
 
-#### Similarity Thresholds
-Adjust the minimum similarity threshold to filter results:
+#### Comparison metrics
+
+Each detection compares two files, which yields two similarity scores: how much of the
+test file the match covers, and how much of the source file it covers. A metric reduces
+those to the single score that Vendetect ranks and filters by. Choose one with
+`--metric`:
+
+| Metric | Score | Use it when |
+| --- | --- | --- |
+| `average` (default) | Mean of both similarities, 0.0-1.0 | You want a balanced default |
+| `min` | Lesser of the two, 0.0-1.0 | Both files must match well, which is the most conservative option |
+| `max` | Greater of the two, 0.0-1.0 | A small file is vendored into a much larger one |
+| `sum` | Sum of both, 0.0-2.0 | You want the ordering Vendetect used before metrics were selectable |
+| `token_overlap` | Count of overlapping tokens | Large matches matter more than proportional ones |
+
+#### Score thresholds
+
+`--min-score` filters results using the units of the metric you selected, so a threshold
+of `0.8` means 80% similarity for `average` but 80 tokens for `token_overlap`. Omit it
+and each metric applies its own default.
 
 ```bash
 # Show only high-confidence matches (80% similarity or higher)
-vendetect /path/to/my/project /path/to/another/project --min-similarity 0.8
+vendetect /path/to/my/project /path/to/another/project --min-score 0.8
 
 # Show all potential matches (lower threshold)
-vendetect /path/to/my/project /path/to/another/project --min-similarity 0.3
+vendetect /path/to/my/project /path/to/another/project --min-score 0.3
+
+# Rank by the size of the match rather than its proportion
+vendetect /path/to/my/project /path/to/another/project \
+  --metric token_overlap --min-score 1000
 ```
 
 ### Output Formats
@@ -153,8 +178,13 @@ vendetect /path/to/my/project /path/to/another/project --min-similarity 0.3
 Vendetect supports three output formats:
 
 1. **rich** (default): Interactive console output with syntax highlighting and side-by-side code comparison
-2. **csv**: Comma-separated values format with columns for Test File, Source File, Test Slice Start, Test Slice End, Source Slice Start, Source Slice End, and Similarity
-3. **json**: JSON format with detailed information about each detection, including file paths, similarity scores, and matched code slices
+2. **csv**: Comma-separated values format with columns for Test File, Source File, Test Slice Start, Test Slice End, Source Slice Start, Source Slice End, Metric, and Score
+3. **json**: JSON format with detailed information about each detection, including file paths, the metric and score, both raw similarities, the token overlap, and matched code slices
+
+The CSV and JSON columns are the same whichever metric you select. Both formats name the
+metric alongside the score, and JSON always reports `similarity_test`,
+`similarity_source`, and `token_overlap`, so you never have to infer which metric
+produced a given file.
 
 Example using CSV output:
 ```bash

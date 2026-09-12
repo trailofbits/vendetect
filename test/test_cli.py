@@ -31,6 +31,7 @@ def mock_repositories(tmp_path, monkeypatch):  # noqa: ANN201
     mock_comparison = MagicMock()
     mock_comparison.similarity1 = 0.9
     mock_comparison.similarity2 = 0.9
+    mock_comparison.token_overlap = 100
     mock_comparison.slices1 = MagicMock()
     mock_comparison.slices1.tolist.return_value = [[1], [2]]
     mock_comparison.slices2 = MagicMock()
@@ -69,7 +70,7 @@ def test_output_format_csv(mock_repositories, capsys):  # noqa: ANN201, ARG001
                 # Check if output is in CSV format
                 assert (
                     "Test File,Source File,Test Slice Start,Test Slice End,Source Slice Start,Source Slice End,"
-                    "Similarity"
+                    "Metric,Score"
                 ) in output
                 # We're just checking the header format is correct, as our mock doesn't generate actual rows
                 # The real implementation would generate rows for matching content
@@ -95,7 +96,8 @@ def test_output_format_json(mock_repositories, capsys):  # noqa: ANN201, ARG001
                 if json_data:  # If any detections were found
                     assert "test_file" in json_data[0]
                     assert "source_file" in json_data[0]
-                    assert "similarity" in json_data[0]
+                    assert "metric" in json_data[0]
+                    assert "score" in json_data[0]
                     assert "slices" in json_data[0]
         except SystemExit:
             pass  # Main might exit, which is fine
@@ -121,8 +123,8 @@ def test_output_to_file(mock_repositories, tmp_path):  # noqa: ANN201
             # Check file content
             file_content = output_file.read_text()
             assert (
-                "Test File,Source File,Test Slice Start,Test Slice End,Source Slice Start,Source Slice End,Similarity"
-                in file_content
+                "Test File,Source File,Test Slice Start,Test Slice End,Source Slice Start,Source Slice End,"
+                "Metric,Score" in file_content
             )
             # We're just checking the header format is correct, as our mock doesn't generate actual rows
         except SystemExit:

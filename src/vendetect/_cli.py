@@ -3,7 +3,7 @@ import csv
 import json
 import logging
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import TextIO
 
@@ -19,6 +19,7 @@ from rich.text import Text
 from .detector import Detection, Status, VenDetector, get_lexer_for_filename
 from .diffing import CollapsedDiffLine, Differ, DiffLineStatus, Document, normalized_edit_distance
 from .errors import VendetectError
+from .metrics import DEFAULT_METRIC, METRICS, ComparisonMetric, get_metric
 from .repo import File, Repository
 
 logger = logging.getLogger(__name__)
@@ -56,10 +57,38 @@ class RichStatus(Status):
             )
 
 
-def output_csv(detections: Iterable[Detection], min_similarity: float = 0.5, output_file: TextIO | None = None) -> None:
+def _scored(
+    detections: Iterable[Detection], metric: ComparisonMetric, min_score: float
+) -> Iterator[tuple[Detection, float]]:
+    """Score detections and stop at the first one that falls below `min_score`.
+
+    Detections arrive already ranked by `metric`, so the first sub-threshold score means
+    every remaining detection is below it too.
+
+    Args:
+        detections: Detections in the order `VenDetector` reported them.
+        metric: The metric that ranked `detections`, used here to score them.
+        min_score: Lower bound, in `metric`'s own units.
+
+    Yields:
+        Each qualifying detection paired with its score.
+
+    """
+    for d in detections:
+        score = metric.score(d.comparison)
+        if score < min_score:
+            return
+        yield d, score
+
+
+def output_csv(
+    detections: Iterable[Detection],
+    metric: ComparisonMetric,
+    min_score: float,
+    output_file: TextIO | None = None,
+) -> None:
     output = output_file if output_file else sys.stdout
     csv_writer = csv.writer(output)
-    # Write header
     csv_writer.writerow(
         [
             "Test File",
@@ -68,23 +97,15 @@ def output_csv(detections: Iterable[Detection], min_similarity: float = 0.5, out
             "Test Slice End",
             "Source Slice Start",
             "Source Slice End",
-            "Similarity",
+            "Metric",
+            "Score",
         ]
     )
 
-    for d in detections:
-        # Calculate overall similarity (average of both similarities)
-        avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
-
-        if avg_similarity < min_similarity:
-            break
-
-        # Get slices
-        test_slices = d.comparison.slices1
-        source_slices = d.comparison.slices2
-
-        for (test_start, test_end), (source_start, source_end) in zip(test_slices, source_slices, strict=False):
-            # Write one row per matched slice
+    for d, score in _scored(detections, metric, min_score):
+        for (test_start, test_end), (source_start, source_end) in zip(
+            d.comparison.slices1, d.comparison.slices2, strict=False
+        ):
             csv_writer.writerow(
                 [
                     f"{d.test.relative_path!s}",
@@ -93,60 +114,54 @@ def output_csv(detections: Iterable[Detection], min_similarity: float = 0.5, out
                     test_end,
                     source_start,
                     source_end,
-                    f"{avg_similarity:.4f}",
+                    metric.name,
+                    metric.format_score(score),
                 ]
             )
 
 
 def output_json(
-    detections: Iterable[Detection], min_similarity: float = 0.5, output_file: TextIO | None = None
+    detections: Iterable[Detection],
+    metric: ComparisonMetric,
+    min_score: float,
+    output_file: TextIO | None = None,
 ) -> None:
     results = []
     output = output_file if output_file else sys.stdout
 
-    for d in detections:
-        # Calculate overall similarity (average of both similarities)
-        avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
-
-        if avg_similarity < min_similarity:
-            break
-
-        # Get slices
-        test_slices = d.comparison.slices1
-        source_slices = d.comparison.slices2
-
-        # Prepare slices data
-        slices_data = []
-        for (test_slice_start, test_slice_end), (source_slice_start, source_slice_end) in zip(
-            test_slices, source_slices, strict=False
-        ):
-            slices_data.append(
-                {
-                    "test_slice": {"start": test_slice_start, "end": test_slice_end},
-                    "source_slice": {"start": source_slice_start, "end": source_slice_end},
-                }
+    for d, score in _scored(detections, metric, min_score):
+        # copydetect hands back numpy scalars. np.float64 subclasses float and so
+        # serializes, but np.int64 does not subclass int, so every integer needs coercing.
+        slices_data = [
+            {
+                "test_slice": {"start": int(test_slice_start), "end": int(test_slice_end)},
+                "source_slice": {"start": int(source_slice_start), "end": int(source_slice_end)},
+            }
+            for (test_slice_start, test_slice_end), (source_slice_start, source_slice_end) in zip(
+                d.comparison.slices1, d.comparison.slices2, strict=False
             )
+        ]
+        results.append(
+            {
+                "test_file": f"{d.test.relative_path!s}",
+                "source_file": f"{d.source.relative_path!s}",
+                "metric": metric.name,
+                "score": int(score) if metric.integral else round(float(score), 4),
+                "similarity_test": round(float(d.comparison.similarity1), 4),
+                "similarity_source": round(float(d.comparison.similarity2), 4),
+                "token_overlap": int(d.comparison.token_overlap),
+                "slices": slices_data,
+            }
+        )
 
-        # Create detection data
-        detection_data = {
-            "test_file": f"{d.test.relative_path!s}",
-            "source_file": f"{d.source.relative_path!s}",
-            "similarity": round(avg_similarity, 4),
-            "similarity_test": round(d.comparison.similarity1, 4),
-            "similarity_source": round(d.comparison.similarity2, 4),
-            "slices": slices_data,
-        }
-
-        results.append(detection_data)
-
-    # Output JSON
     json.dump(results, output, indent=2)
 
 
 def output_rich(  # noqa: PLR0912 PLR0913 PLR0915 C901
     detections: Iterable[Detection],
     console: Console,
-    min_similarity: float = 0.5,
+    metric: ComparisonMetric,
+    min_score: float,
     output_file: TextIO | None = None,
     collapse_identical_lines_threshold: int = 10,
     edit_distance_threshold: float = 0.75,
@@ -154,23 +169,15 @@ def output_rich(  # noqa: PLR0912 PLR0913 PLR0915 C901
     # If an output file is specified, create a new Console for it
     file_console = Console(file=output_file) if output_file else console
 
-    for d in detections:
+    for d, score in _scored(detections, metric, min_score):
         # Create a table for the detection results
         table = Table(title="Vendoring Detection", expand=True)
         table.add_column("Test File", style="cyan")
         table.add_column("Source File", style="green")
-        table.add_column("Similarity", justify="right", style="yellow")
-
-        # Calculate overall similarity (average of both similarities)
-        avg_similarity = (d.comparison.similarity1 + d.comparison.similarity2) / 2
-
-        if avg_similarity < min_similarity:
-            break
-
-        similarity_str = f"{avg_similarity:.1%}"
+        table.add_column(metric.label, justify="right", style="yellow")
 
         # Add the main row with test and source files
-        table.add_row(f"{d.test.relative_path!s}", f"{d.source.relative_path!s}", similarity_str)
+        table.add_row(f"{d.test.relative_path!s}", f"{d.source.relative_path!s}", metric.display_score(score))
 
         # Read file content for both test and source files
         def read_file_content(file: File) -> str:
@@ -315,10 +322,18 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         help="file extension to consider (can be used multiple times, e.g. `-t py -t c`)",
     )
     parser.add_argument(
-        "--min-similarity",
+        "--metric",
+        type=str,
+        default=DEFAULT_METRIC,
+        choices=sorted(METRICS),
+        help=f"comparison metric used to rank and filter detections (default: {DEFAULT_METRIC})",
+    )
+    parser.add_argument(
+        "--min-score",
         type=float,
-        default=0.5,
-        help="the minimum similarity threshold to output a match (range: 0.0-1.0, default: 0.5)",
+        default=None,
+        help="minimum score to report a match, in the units of the selected --metric; "
+        "defaults to " + ", ".join(f"{name}={metric.default_threshold:g}" for name, metric in sorted(METRICS.items())),
     )
 
     # Performance optimization options
@@ -399,12 +414,17 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             Repository.load(args.SOURCE_REPO, args.source_subdir) as source_repo,
             RichStatus(console) as status,
         ):
+            # Get the comparison metric
+            metric = get_metric(args.metric)
+            min_score = args.min_score if args.min_score is not None else metric.default_threshold
+
             # Initialize detector with optimization options
             vend = VenDetector(
                 status=status,
                 incremental=args.incremental,
                 batch_size=args.batch_size,
                 max_history_depth=args.max_history_depth,
+                metric=metric,
             )
 
             # Get detections
@@ -427,11 +447,11 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
 
             # Output based on format
             if args.format == "csv":
-                output_csv(detections, args.min_similarity, output_file)
+                output_csv(detections, metric, min_score, output_file)
             elif args.format == "json":
-                output_json(detections, args.min_similarity, output_file)
+                output_json(detections, metric, min_score, output_file)
             else:  # rich format
-                output_rich(detections, console, args.min_similarity, output_file)
+                output_rich(detections, console, metric, min_score, output_file)
     except VendetectError as e:
         logger.error(str(e))  # noqa: TRY400
     except KeyboardInterrupt:

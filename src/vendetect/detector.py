@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from functools import wraps
 from heapq import heappop, heappush
 from logging import getLogger
-from typing import TYPE_CHECKING, Generic
+from typing import TYPE_CHECKING, Generic, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
@@ -126,9 +126,11 @@ class VenDetector(Generic[F]):
         incremental: bool = False,
     ):
         if comparator is None:
-            self.comparator: Comparator[F] = CopyDetectComparator()
-        else:
-            self.comparator = comparator
+            # `CopyDetectComparator` is a `Comparator[CodeFingerprint]`, and `F` defaults to
+            # `CodeFingerprint`, so this holds for the unparameterized `VenDetector()`. A
+            # `VenDetector[T]` for any other `T` must supply its own comparator.
+            comparator = cast("Comparator[F]", CopyDetectComparator())
+        self.comparator: Comparator[F] = comparator
         if status is None:
             self.status: Status = Status()
         else:

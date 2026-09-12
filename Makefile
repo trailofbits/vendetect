@@ -22,6 +22,10 @@ endif
 all:
 	@echo "Run my targets individually!"
 
+.PHONY: dev
+dev:
+	uv sync --group dev
+
 .PHONY: run
 run:
 	uv run vendetect $(ARGS)

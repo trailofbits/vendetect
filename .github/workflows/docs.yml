@@ -24,7 +24,7 @@ jobs:
 
       - name: setup
         run: |
-          make dev INSTALL_EXTRA=doc
+          make dev
 
       - name: build docs
         run: |

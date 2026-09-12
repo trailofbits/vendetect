@@ -2,6 +2,7 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
@@ -9,7 +10,7 @@ from logging import getLogger
 from os import SEEK_END
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Optional, ParamSpec, Self, TypeVar
+from typing import Concatenate, Optional, ParamSpec, Self, TypeVar
 from urllib.parse import urlparse
 
 from .errors import VendetectRuntimeError
@@ -20,6 +21,7 @@ log = getLogger(__name__)
 
 T = TypeVar("T")
 P = ParamSpec("P")
+C = TypeVar("C", bound=AbstractContextManager)
 
 
 class Rounding(Enum):
@@ -31,11 +33,11 @@ class RepositoryError(VendetectRuntimeError):
     pass
 
 
-def with_self(func: Callable[P, T]) -> Callable[P, T]:
+def with_self(func: Callable[Concatenate[C, P], T]) -> Callable[Concatenate[C, P], T]:
     @wraps(func)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        with args[0]:  # type: ignore
-            return func(*args, **kwargs)
+    def wrapper(self: C, *args: P.args, **kwargs: P.kwargs) -> T:
+        with self:
+            return func(self, *args, **kwargs)
 
     return wrapper
 
@@ -50,9 +52,11 @@ class Repository:
         if rev is None:
             with self:
                 if self.is_git:
-                    git_path: str = GIT_PATH  # type: ignore
+                    if GIT_PATH is None:
+                        msg = "`git` binary could not be found"
+                        raise RepositoryError(msg)
                     self.rev = (
-                        subprocess.check_output([git_path, "rev-parse", "HEAD"], cwd=self.path)  #  noqa: S603
+                        subprocess.check_output([GIT_PATH, "rev-parse", "HEAD"], cwd=self.path)  # noqa: S603
                         .strip()
                         .decode("utf-8")
                     )
@@ -83,7 +87,7 @@ class Repository:
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
+    def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
     @with_self
@@ -135,10 +139,12 @@ class Repository:
     @with_self
     def is_shallow_clone(self) -> bool:
         """Test whether the root repository is a shallow cone."""
+        if GIT_PATH is None:
+            return False
         try:
             return (
                 subprocess.check_output(  # noqa: S603
-                    [GIT_PATH, "rev-parse", "--is-shallow-repository"],  # type: ignore
+                    [GIT_PATH, "rev-parse", "--is-shallow-repository"],
                     cwd=self.path,
                     stderr=subprocess.DEVNULL,
                 ).strip()
@@ -253,6 +259,7 @@ class _ClonedRepository(Repository):
                 f"Error cloning {self._clone_uri}: `git` binary could not be found;please make sure it is in your PATH"
             )
             raise RepositoryError(msg)
+        self._git_path: str = GIT_PATH
         super().__init__(Path(), rev=rev, subdir=subdir)
 
     def __enter__(self) -> Self:
@@ -262,7 +269,7 @@ class _ClonedRepository(Repository):
             self.root_path = Path(self._tempdir.__enter__())
             try:
                 subprocess.check_call(  # noqa: S603
-                    [GIT_PATH, "clone", str(self._clone_uri), "."],  # type: ignore
+                    [self._git_path, "clone", str(self._clone_uri), "."],
                     cwd=self.root_path,
                     stderr=subprocess.DEVNULL,
                 )
@@ -271,10 +278,10 @@ class _ClonedRepository(Repository):
                 raise RepositoryError(msg) from None
         return super().__enter__()
 
-    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self._entries -= 1
-        if self._entries == 0:
-            self._tempdir.__exit__(exc_type, exc_val, exc_tb)  # type: ignore
+        if self._entries == 0 and self._tempdir is not None:
+            self._tempdir.__exit__(exc_type, exc_val, exc_tb)
             self._tempdir = None
         super().__exit__(exc_type, exc_val, exc_tb)
 
@@ -349,18 +356,23 @@ class RepositoryCommit(_ClonedRepository):
         super().__init__(str(repo.root_path), rev=commit)
 
     def _ancestors(self) -> list[Repository]:
-        stack: list[Repository] = [self]
-        while isinstance(stack[-1], RepositoryCommit):
-            stack.append(stack[-1].repo)
-        return stack
+        result: list[Repository] = []
+        r: Repository = self
+        while isinstance(r, RepositoryCommit):
+            result.append(r)
+            r = r.repo
+        result.append(r)
+        return result
 
     def commit_exists(self, rev: str | None = None) -> bool:
+        if GIT_PATH is None:
+            return False
         if rev is None:
             rev = self.rev
         try:
             return (
                 subprocess.check_output(  # noqa: S603
-                    [GIT_PATH, "cat-file", "-t", rev],  # type: ignore
+                    [GIT_PATH, "cat-file", "-t", rev],
                     cwd=self.root_path,
                     stderr=subprocess.DEVNULL,
                 ).strip()
@@ -385,7 +397,7 @@ class RepositoryCommit(_ClonedRepository):
             with tempfile.NamedTemporaryFile() as stdout:
                 try:
                     subprocess.check_call(  # noqa: S603
-                        [GIT_PATH, "checkout", self.rev],  # type: ignore
+                        [self._git_path, "checkout", self.rev],
                         cwd=self.root_path,
                         stdout=stdout,
                         stderr=stdout,
@@ -408,7 +420,7 @@ class RepositoryCommit(_ClonedRepository):
                 a.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
+    def __exit__(self, exc_type, exc_val, exc_tb):
         for a in self._ancestors():
             if a is self:
                 super().__exit__(exc_type, exc_val, exc_tb)
@@ -455,8 +467,7 @@ class RemoteGitRepository(_ClonedRepository):
                 for_rev = self.rev
             elif for_file:
                 # get the latest commit from the remote repo
-                git_path: str = GIT_PATH  # type: ignore
-                raw_head = subprocess.check_output([git_path, "ls-remote", self.url, "HEAD"])  # noqa: S603
+                raw_head = subprocess.check_output([self._git_path, "ls-remote", self.url, "HEAD"])  # noqa: S603
                 for_rev = raw_head.split()[0].decode("utf-8")
         result = urlparse(self.url)
         if result.netloc == "github.com" and for_rev:

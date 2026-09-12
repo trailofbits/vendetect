@@ -27,33 +27,30 @@ logger = logging.getLogger(__name__)
 class RichStatus(Status):
     def __init__(self, console: Console):
         self.console: Console = console
-        self.progress: Progress | None = None
+        self.progress: Progress = Progress(console=self.console, transient=True)
         self.compare_tasks: list[TaskID] = []
 
-    def __enter__(self):  # type: ignore
-        self.progress = Progress(console=self.console, transient=True)
+    def __enter__(self):
         self.progress.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
-        self.progress.__exit__(exc_type, exc_val, exc_tb)  # type: ignore
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.progress.__exit__(exc_type, exc_val, exc_tb)
 
     def on_compare(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:  # noqa: ARG002
-        self.compare_tasks.append(
-            self.progress.add_task(":magnifying_glass_tilted_right: comparing…")  # type: ignore
-        )
+        self.compare_tasks.append(self.progress.add_task(":magnifying_glass_tilted_right: comparing…"))
 
     def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:  # noqa: ARG002
-        self.progress.remove_task(self.compare_tasks[-1])  # type: ignore
+        self.progress.remove_task(self.compare_tasks[-1])
         self.compare_tasks.pop()
 
     def update_num_comparisons(self, num: int) -> None:
-        self.progress.update(self.compare_tasks[-1], total=num)  # type: ignore
+        self.progress.update(self.compare_tasks[-1], total=num)
 
     def update_compare_progress(self, file: File | None = None) -> None:
-        self.progress.update(self.compare_tasks[-1], advance=1)  # type: ignore
+        self.progress.update(self.compare_tasks[-1], advance=1)
         if file is not None:
-            self.progress.update(  # type: ignore
+            self.progress.update(
                 self.compare_tasks[-1],
                 description=f":magnifying_glass_tilted_right: {file.relative_path.name!s}",
             )
@@ -245,13 +242,13 @@ def output_rich(  # noqa: PLR0912 PLR0913 PLR0915 C901
                             status_col = Text("✓", style="green reverse")
                         if diff_line.left is None:
                             left: ConsoleRenderable = Text("")
-                        else:
+                        elif test_lexer is not None:
                             left = Syntax(
                                 diff_line.left, lexer=test_lexer, line_numbers=True, start_line=diff_line.left_line
                             )
                         if diff_line.right is None:
                             right: ConsoleRenderable = Text("")
-                        else:
+                        elif source_lexer is not None:
                             right = Syntax(
                                 diff_line.right, lexer=source_lexer, line_numbers=True, start_line=diff_line.right_line
                             )

@@ -24,4 +24,4 @@ jobs:
           cache-dependency-glob: pyproject.toml
 
       - name: lint
-        run: make lint INSTALL_EXTRA=lint
+        run: make lint

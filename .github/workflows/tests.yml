@@ -19,14 +19,14 @@ jobs:
           - "3.13"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           # we need to do a full clone for the tests to work
           fetch-depth: 0
           persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@4959332f0f014c5280e7eac8b70c90cb574c9f9b # v6.6.0
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           enable-cache: true
           cache-dependency-glob: pyproject.toml
@@ -35,4 +35,4 @@ jobs:
         run: uv python install ${{ matrix.python }}
 
       - name: test
-        run: make test INSTALL_EXTRA=test
+        run: make test

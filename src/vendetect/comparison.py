@@ -62,13 +62,6 @@ class Comparison:
     """
     slices2: tuple[Slice, ...]
 
-    def __lt__(self, other: "Comparison") -> bool:
-        # Default behavior: sum of similarities
-        # Note: This is overridden when using custom metrics via Detection class
-        oursim = self.similarity1 + self.similarity2
-        theirsim = other.similarity1 + other.similarity2
-        return oursim > theirsim
-
 
 class Comparator(ABC, Generic[F]):
     @abstractmethod

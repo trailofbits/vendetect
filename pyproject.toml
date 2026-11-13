@@ -3,13 +3,13 @@ name = "vendetect"
 version = "0.0.4"
 description = "Command-line tool for automatically detecting vendored and copy/pasted code"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [
     { name = "Trail of Bits", email = "opensource@trailofbits.com" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
 ]
 dependencies = [
     "copydetect>=0.5.0",
@@ -57,6 +57,9 @@ include = ["src/**/*.py", "test/**/*.py"]
 
 [tool.ruff.lint]
 select = ["ALL"]
+extend-ignore = [
+    "CPY001", # The project does not require per-file copyright headers.
+]
 # D203 and D213 are incompatible with D211 and D212 respectively.
 # COM812 and ISC001 can cause conflicts when using ruff as a formatter.
 # See https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules.

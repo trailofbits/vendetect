@@ -40,7 +40,7 @@ class Status:
         self,
         test_files: Iterable[File],  # noqa: ARG002
         source_files: Iterable[File],  # noqa: ARG002
-    ) -> None | tuple[Iterable[File], Iterable[File]]:
+    ) -> tuple[Iterable[File], Iterable[File]] | None:
         return None
 
     def compare_completed(self, test_files: Iterable[File], source_files: Iterable[File]) -> None:

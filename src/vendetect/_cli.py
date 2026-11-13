@@ -87,7 +87,7 @@ def output_csv(
     min_score: float,
     output_file: TextIO | None = None,
 ) -> None:
-    output = output_file if output_file else sys.stdout
+    output = output_file or sys.stdout
     csv_writer = csv.writer(output)
     csv_writer.writerow(
         [
@@ -127,7 +127,7 @@ def output_json(
     output_file: TextIO | None = None,
 ) -> None:
     results = []
-    output = output_file if output_file else sys.stdout
+    output = output_file or sys.stdout
 
     for d, score in _scored(detections, metric, min_score):
         # copydetect hands back numpy scalars. np.float64 subclasses float and so
@@ -163,6 +163,7 @@ def output_rich(  # noqa: PLR0912 PLR0913 PLR0915 C901
     metric: ComparisonMetric,
     min_score: float,
     output_file: TextIO | None = None,
+    *,
     collapse_identical_lines_threshold: int = 10,
     edit_distance_threshold: float = 0.75,
 ) -> None:

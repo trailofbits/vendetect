@@ -315,7 +315,9 @@ class VenDetector(Generic[F]):
                 continue
 
             if history:
-                new_detections = tuple(self.compare((detection.test,), (detection.source,)))
+                test_file = File(detection.test.relative_path, test_repo)
+                source_file = File(detection.source.relative_path, source_repo)
+                new_detections = tuple(self.compare((test_file,), (source_file,)))
                 if new_detections:
                     best = max([best, *new_detections], key=lambda d: self.metric.score(d.comparison))
 

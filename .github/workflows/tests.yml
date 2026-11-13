@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   test:
+    env:
+      UV_PYTHON: ${{ matrix.python }}
     strategy:
       matrix:
         python:
